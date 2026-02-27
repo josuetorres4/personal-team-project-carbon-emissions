@@ -234,6 +234,7 @@ Dashboard pages:
 | Agent Reasoning | LLM reasoning traces from every agent |
 | 🤖 The Debate | Chat-style view of the Planner↔Governance negotiation |
 | 🌍 The Impact | Carbon savings as real-world equivalencies + business value |
+| 💬 Ask the Agent | **Interactive chat** — ask questions and get answers about your pipeline results |
 
 ---
 

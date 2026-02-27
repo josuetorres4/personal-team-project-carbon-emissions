@@ -93,6 +93,8 @@ class LLMProvider:
 
         if any(w in prompt_lower for w in _DIALOGUE_KEYWORDS):
             return self._mock_dialogue_response(system_prompt, user_message)
+        elif "carbon optimization assistant" in prompt_lower:
+            return self._mock_chat_assistant(user_message)
         elif "explain" in prompt_lower or "rationale" in prompt_lower:
             return self._mock_explanation(user_message)
         elif "ticket" in prompt_lower or "jira" in prompt_lower or "pr " in prompt_lower:
@@ -149,6 +151,111 @@ class LLMProvider:
                 "Based on the data presented, the proposal appears sound. "
                 "The carbon savings are well-supported by the grid intensity differentials. "
                 "I recommend proceeding with the standard safeguards in place."
+            )
+
+    def _mock_chat_assistant(self, user_message: str) -> str:
+        """Generate a contextual chat response for the interactive assistant page."""
+        # When multi-turn context is passed, extract only the current question for keyword matching
+        if "current question:" in user_message.lower():
+            msg = user_message.lower().split("current question:")[-1].strip()
+        else:
+            msg = user_message.lower()
+
+        if any(w in msg for w in ["hello", "hi", "hey", "start", "help", "what can"]):
+            return (
+                "Hi! I'm the sust-AI-naible Carbon Optimization Assistant. "
+                "I can help you understand the pipeline results, explain the methodology, "
+                "or answer questions about your cloud carbon footprint. "
+                "Try asking: *'What drove the most carbon savings?'*, "
+                "*'How does verification work?'*, or *'What was the cost impact?'*"
+            )
+        elif any(w in msg for w in ["emission", "carbon", "footprint", "co2", "kgco"]):
+            return (
+                "The optimization reduced your cloud emissions by shifting workloads to cleaner "
+                "regions and time windows. The biggest lever is region-shifting: moving batch jobs "
+                "from high-intensity regions (e.g. us-east-1 at ~415 gCO₂/kWh) to low-intensity "
+                "ones (e.g. eu-north-1 at ~8 gCO₂/kWh) can cut per-job emissions by over 90%. "
+                "Time-shifting within the same region is lower-impact but zero-cost. "
+                "See the **Carbon Analysis** page for a full breakdown by region, team, and workload type."
+            )
+        elif any(w in msg for w in ["cost", "price", "dollar", "spend", "expensive", "cheap"]):
+            return (
+                "The optimizations had a minimal net effect on cloud cost. "
+                "Time-shifts are cost-neutral (same region, different hour), while region-shifts "
+                "may add a small data-transfer charge but often benefit from cheaper spot pricing "
+                "in cleaner regions. The **Trade-off Analysis** page shows the full cost-vs-carbon "
+                "Pareto frontier at carbon prices from $0 to $200/ton."
+            )
+        elif any(w in msg for w in ["recommend", "suggestion", "planner", "plan", "shift", "move"]):
+            return (
+                "The Planner agent scores every eligible job on three dimensions: carbon reduction "
+                "potential (gCO₂e saved), cost delta (USD), and SLA risk (urgency + dependencies). "
+                "It then generates region-shift or time-shift recommendations for jobs where the "
+                "carbon benefit outweighs the risk. Before any change is executed, the Governance "
+                "agent must approve the batch — see the **Optimization Results** page for the full "
+                "breakdown with approval rates by risk level."
+            )
+        elif any(w in msg for w in ["verif", "mrv", "evidence", "proof", "confident", "saving", "saved"]):
+            return (
+                "Verification uses counterfactual reasoning: the Verifier agent models what "
+                "emissions *would have been* without the optimization (using the original job "
+                "placement + actual grid intensity data), then compares that against observed "
+                "post-optimization emissions. Savings are **confirmed** when the 90% confidence "
+                "interval excludes zero, **partial** when the point estimate is positive but CI "
+                "includes zero, and **refuted** when the observed change went the wrong direction. "
+                "See the **Verification (MRV)** and **Evidence Explorer** pages for every record."
+            )
+        elif any(w in msg for w in ["governance", "approve", "reject", "risk", "policy", "guardrail"]):
+            return (
+                "The Governance agent enforces organizational policy before any change runs. "
+                "It auto-approves low-risk recommendations (batch jobs, small cost impact) and "
+                "flags medium/high-risk ones (production workloads, cost increase >20%, "
+                "cross-continent moves) for human review. If it challenges a batch, the Planner "
+                "can revise and resubmit — the negotiation continues for up to 4 rounds. "
+                "See **🤖 The Debate** for the full negotiation transcript."
+            )
+        elif any(w in msg for w in ["agent", "how does", "how do", "pipeline", "work", "architect", "explain"]):
+            return (
+                "The pipeline runs 6 stages: **Sense** (Ingestor collects cloud workload data), "
+                "**Model** (Carbon Accountant calculates kgCO₂e per job using grid intensity × "
+                "resource usage × PUE), **Decide** (Planner generates recommendations → "
+                "Governance approves), **Act** (Executor applies changes and raises tickets), "
+                "**Verify** (Verifier checks actual savings via counterfactual MRV), "
+                "and **Learn** (Developer Copilot awards points and sends team summaries). "
+                "The **Agent Reasoning** page shows every LLM reasoning step."
+            )
+        elif any(w in msg for w in ["team", "leaderboard", "point", "score", "rank", "best", "top"]):
+            return (
+                "Points are awarded *only* for verified savings — never for estimates. "
+                "Confirmed verifications earn 100 pts/kgCO₂e; partial verifications earn 50 pts/kgCO₂e. "
+                "SLA violations incur a 50-point penalty per incident. "
+                "The **Team Leaderboard** page shows current standings, total kgCO₂e avoided per team, "
+                "and the Developer Copilot's personalised summary for each team."
+            )
+        elif any(w in msg for w in ["region", "us-east", "us-west", "eu-north", "eu-west", "ap-south"]):
+            return (
+                "Grid carbon intensity varies dramatically by region: eu-north-1 (Stockholm) runs "
+                "at ~8 gCO₂/kWh (hydro + nuclear), us-west-2 (Oregon) at ~130 gCO₂/kWh (hydro), "
+                "eu-west-1 (Ireland) at ~220 gCO₂/kWh (wind + gas), us-east-1 (Virginia) at "
+                "~415 gCO₂/kWh (coal + gas), and ap-south-1 (Mumbai) at ~700 gCO₂/kWh (coal). "
+                "The **Carbon Analysis** heatmap shows how intensity varies hour-by-hour within each region."
+            )
+        elif any(w in msg for w in ["mock", "llm", "openai", "gpt", "api", "key", "real"]):
+            return (
+                "The system works fully without an API key — the mock LLM generates structured, "
+                "contextually appropriate responses for all agent tasks. "
+                "To use a real LLM, set `OPENAI_API_KEY` in your `.env` file and re-run "
+                "`python run_pipeline.py`. The system will automatically switch to GPT-4o-mini. "
+                "All *numbers* are computed deterministically regardless of which LLM is used — "
+                "the LLM only explains and communicates, never calculates."
+            )
+        else:
+            return (
+                "This system tracks, optimizes, and *verifies* cloud carbon emissions using a "
+                "closed-loop multi-agent pipeline. Every number is backed by deterministic "
+                "calculations (not LLM estimates), and every claimed saving has a counterfactual "
+                "evidence chain. You can ask me about: emissions, costs, recommendations, "
+                "verification, the agents, team leaderboard, or the methodology."
             )
 
     def _mock_explanation(self, context: str) -> str:
