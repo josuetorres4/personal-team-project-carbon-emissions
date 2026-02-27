@@ -4,6 +4,47 @@
 
 ---
 
+## Why This Project?
+
+### The problem is real and growing
+
+Data centers now consume roughly **1% of global electricity** (~205 TWh/year) and that share is accelerating with AI workloads ([Masanet et al., *Science* 2020](https://www.science.org/doi/10.1126/science.aba3758)). Under the EU's Corporate Sustainability Reporting Directive (CSRD), ~50,000 companies are now **legally required** to disclose Scope 1/2/3 emissions — including cloud use. Carbon reporting has shifted from "nice to have" to "legally required."
+
+### The gap in existing tools
+
+Every major cloud provider ships a carbon dashboard. None of them close the loop:
+
+| Tool | Measures | Recommends | **Executes** | **Verifies savings** |
+|------|----------|-----------|-------------|---------------------|
+| AWS Carbon Footprint Tool | ✅ | ❌ | ❌ | ❌ |
+| Google Cloud Carbon Footprint | ✅ | ✅ | ❌ | ❌ |
+| Cloud Carbon Footprint (Thoughtworks) | ✅ | ✅ | ❌ | ❌ |
+| **sust-AI-naible** | ✅ | ✅ | ✅ | ✅ |
+
+Existing tools tell you what happened last month. This system closes the loop: it *acts*, then *proves the action worked* using counterfactual reasoning (what would emissions have been if we hadn't intervened?).
+
+### The results are meaningful
+
+Google's own research ([Radovanović et al., *IEEE Trans. Power Systems* 2022](https://arxiv.org/abs/2106.11750)) showed **10–40% carbon reduction** by shifting flexible workloads temporally and spatially. CarbonScaler ([Hanafy et al., SIGMETRICS 2023](https://arxiv.org/abs/2302.08681)) demonstrated **51% carbon savings** over carbon-agnostic execution. This project implements those same strategies and shows you the numbers on your own simulated workload.
+
+### What makes this technically interesting
+
+1. **Closed-loop control** — Sense → Model → Decide → Act → Verify → Learn, not a one-shot script
+2. **Multi-agent architecture** — Specialized agents with role separation and checks: a Governance agent must approve every batch the Planner proposes before the Executor runs it
+3. **Multi-objective optimization** — Balances carbon, cost, and latency together (carbon-only optimization can cause 2–3× cost spikes, per CarbonScaler)
+4. **Verifiable claims** — Every "we saved X kg" statement has a traceable evidence chain with confidence intervals; this is Measurement, Reporting, and Verification (MRV), the same framework carbon markets use
+5. **AI + determinism boundary** — LLM agents handle reasoning, rationale, and communication; all numbers are computed deterministically; the two never mix
+
+### What you learn building and using it
+
+- How to structure a multi-agent system with clear role boundaries and a message-passing protocol
+- How carbon accounting actually works (GHG Protocol, Scope 2, location-based vs market-based methods)
+- How to use counterfactual reasoning to verify that an intervention worked
+- How to balance competing objectives (cost vs carbon vs latency) rather than optimizing a single metric
+- How to integrate an LLM into a pipeline where correctness matters — as a communicator, not a calculator
+
+---
+
 ## Quick Start (no API key required)
 
 ```bash
