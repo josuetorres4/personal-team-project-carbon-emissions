@@ -1,5 +1,3 @@
-GAP_ANALYSIS
-
 # Gap Analysis
 
 ## Overview
