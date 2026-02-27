@@ -31,13 +31,25 @@ import pandas as pd
 from src.agents.base import BaseAgent, LLMProvider
 from src.shared.models import Recommendation
 
+# Import Config for centralized settings, fall back to local defaults if unavailable
+try:
+    from config import Config as _Config
+    _MAX_RECOMMENDATIONS_PER_BATCH = _Config.MAX_RECOMMENDATIONS_PER_BATCH
+    _MAX_BATCH_COST_INCREASE = _Config.MAX_BATCH_COST_INCREASE
+    _MAX_JOBS_PER_REGION = _Config.MAX_JOBS_PER_REGION_PER_BATCH
+except Exception:
+    _MAX_RECOMMENDATIONS_PER_BATCH = 6000
+    _MAX_BATCH_COST_INCREASE = 500.0
+    _MAX_JOBS_PER_REGION = 15
+
 
 # ── Governance configuration ──────────────────────────────────────────
 COST_INCREASE_HIGH_THRESHOLD = 5.0
 COST_INCREASE_MEDIUM_THRESHOLD = 1.0
 SIMULATED_HIGH_RISK_APPROVAL_RATE = 0.85
-MAX_RECOMMENDATIONS_PER_BATCH = 6000
-MAX_BATCH_COST_INCREASE = 500.0
+MAX_RECOMMENDATIONS_PER_BATCH = _MAX_RECOMMENDATIONS_PER_BATCH
+MAX_BATCH_COST_INCREASE = _MAX_BATCH_COST_INCREASE
+MAX_JOBS_PER_REGION_PER_BATCH = _MAX_JOBS_PER_REGION
 
 
 @dataclass
@@ -159,6 +171,112 @@ class GovernanceAgent(BaseAgent):
         if batch_cost > MAX_BATCH_COST_INCREASE:
             return f"Cost increase budget exhausted (${batch_cost:.2f} > ${MAX_BATCH_COST_INCREASE:.2f})"
         return None
+
+    def review_proposal(self, proposal, dialogue) -> "AgentMessage":
+        """
+        Review a Planner's batch proposal. Checks for:
+        - Concentration risk (too many jobs to one region)
+        - Production workload safety
+        - Cost budget compliance
+        - Policy compliance
+
+        Uses LLM to generate substantive feedback.
+        Returns CHALLENGE, APPROVAL, or REJECTION message.
+
+        Args:
+            proposal: AgentMessage from PlannerAgent (PROPOSAL type)
+            dialogue: Dialogue object with full conversation context
+
+        Returns:
+            AgentMessage of type CHALLENGE, APPROVAL, or REJECTION
+        """
+        from src.shared.protocol import AgentMessage, MessageType
+
+        data = proposal.structured_data
+        issues = []
+
+        # Check concentration risk per region
+        by_region = data.get("by_region", {})
+        for region, stats in by_region.items():
+            if stats.get("count", 0) > MAX_JOBS_PER_REGION_PER_BATCH:
+                issues.append(
+                    f"Concentration risk: {stats['count']} jobs targeted at {region} "
+                    f"(limit: {MAX_JOBS_PER_REGION_PER_BATCH})"
+                )
+
+        # Check total cost budget
+        total_cost_delta = data.get("total_cost_delta_usd", 0.0)
+        if total_cost_delta > MAX_BATCH_COST_INCREASE:
+            issues.append(
+                f"Cost budget exceeded: ${total_cost_delta:.2f} > ${MAX_BATCH_COST_INCREASE:.2f}"
+            )
+
+        # Check batch size
+        total_recs = data.get("total_recommendations", 0)
+        if total_recs > MAX_RECOMMENDATIONS_PER_BATCH:
+            issues.append(
+                f"Batch too large: {total_recs} > {MAX_RECOMMENDATIONS_PER_BATCH} limit"
+            )
+
+        # Check risk distribution — flag high-risk concentration
+        by_risk = data.get("by_risk_level", {})
+        high_risk_count = by_risk.get("high", 0)
+        if high_risk_count > 0 and total_recs > 0:
+            high_risk_pct = high_risk_count / total_recs * 100
+            if high_risk_pct > 20:
+                issues.append(
+                    f"High-risk concentration: {high_risk_count} high-risk jobs "
+                    f"({high_risk_pct:.0f}% of batch) — requires human review"
+                )
+
+        # Determine initial message type
+        if len(issues) == 0:
+            initial_type = "approve"
+        elif total_cost_delta > MAX_BATCH_COST_INCREASE or total_recs > MAX_RECOMMENDATIONS_PER_BATCH:
+            initial_type = "reject"
+        else:
+            initial_type = "challenge"
+
+        # LLM generates substantive feedback
+        system_prompt = (
+            f"{self.get_system_prompt()}\n\n"
+            f"You are participating in a multi-agent planning discussion.\n"
+            f"Review the dialogue below and respond from YOUR perspective.\n"
+            f"You MUST reference specific numbers from the data.\n"
+            f"If you disagree, explain WHY with evidence.\n"
+            f"Keep responses under 150 words. Be direct."
+        )
+        issues_text = "\n".join(f"- {i}" for i in issues) if issues else "None identified."
+        user_prompt = (
+            f"Review this batch proposal from the Planner Agent:\n\n"
+            f"Proposal content: {proposal.content}\n\n"
+            f"Batch data: {data}\n\n"
+            f"Policy issues identified:\n{issues_text}\n\n"
+            f"Respond as Governance Agent with your assessment."
+        )
+        response_text = self.llm.chat(system_prompt, user_prompt)
+        self.memory.add_reasoning("proposal_review", response_text)
+
+        if initial_type == "approve":
+            msg_type = MessageType.APPROVAL
+        elif initial_type == "reject":
+            msg_type = MessageType.REJECTION
+        else:
+            msg_type = self._determine_response_type(response_text)
+            if msg_type == MessageType.PROPOSAL:
+                # In a review context, an unclassified LLM response is a challenge
+                msg_type = MessageType.CHALLENGE
+
+        return AgentMessage(
+            from_agent=self.name,
+            to_agent=proposal.from_agent,
+            message_type=msg_type,
+            subject=proposal.subject,
+            content=response_text,
+            structured_data={"issues": issues, "initial_verdict": initial_type},
+            in_reply_to=proposal.message_id,
+            round_number=proposal.round_number + 1,
+        )
 
     def _evaluate_single(self, rec, batch_count, batch_cost_increase, rng) -> GovernanceDecision:
         """Evaluate a single recommendation: deterministic rules + LLM reasoning."""

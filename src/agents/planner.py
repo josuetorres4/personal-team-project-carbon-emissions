@@ -28,14 +28,25 @@ from src.shared.models import (
 from src.agents.carbon_accountant import compute_emissions_for_config
 from src.simulator.cost_model import compute_total_cost
 
+# Import Config for centralized settings, fall back to local defaults if unavailable
+try:
+    from config import Config as _Config
+    _CARBON_PRICE_PER_TON = _Config.CARBON_PRICE_PER_TON
+    _MIN_CARBON_REDUCTION_PCT = _Config.MIN_CARBON_REDUCTION_PCT
+    _MAX_COST_INCREASE_PCT = _Config.MAX_COST_INCREASE_PCT
+except Exception:
+    _CARBON_PRICE_PER_TON = 75.0
+    _MIN_CARBON_REDUCTION_PCT = 10.0
+    _MAX_COST_INCREASE_PCT = 20.0
+
 
 # ── Planner configuration ────────────────────────────────────────────
-CARBON_PRICE_PER_TON = 75
+CARBON_PRICE_PER_TON = _CARBON_PRICE_PER_TON
 CARBON_PRICE_PER_KG = CARBON_PRICE_PER_TON / 1000
 
 REQUIRE_CARBON_REDUCTION = True
-MIN_CARBON_REDUCTION_PCT = 10.0
-MAX_COST_INCREASE_PCT = 20.0
+MIN_CARBON_REDUCTION_PCT = _MIN_CARBON_REDUCTION_PCT
+MAX_COST_INCREASE_PCT = _MAX_COST_INCREASE_PCT
 
 DEFERRAL_WINDOWS = {
     WorkloadCategory.URGENT: timedelta(hours=0),
@@ -175,6 +186,85 @@ class PlannerAgent(BaseAgent):
                 f"confidence: {rec.confidence:.0%}\n"
             )
             rec.rationale = self.reason(system_prompt, context)
+
+    def propose_batch_strategy(self, batch_proposals: list, intensity_df) -> "AgentMessage":
+        """
+        Create a batch-level proposal that the Governance agent can review.
+
+        Groups recommendations by target region, summarizes totals.
+        Uses LLM to generate a strategic rationale for the batch.
+        Returns an AgentMessage of type PROPOSAL.
+
+        Args:
+            batch_proposals: list of Recommendation objects
+            intensity_df: carbon intensity DataFrame
+
+        Returns:
+            AgentMessage with structured_data containing aggregate stats
+        """
+        from src.shared.protocol import AgentMessage, MessageType
+
+        # Group by proposed region
+        by_region: dict = {}
+        for rec in batch_proposals:
+            region = rec.proposed_region
+            if region not in by_region:
+                by_region[region] = {
+                    "count": 0,
+                    "total_carbon_delta_kg": 0.0,
+                    "total_cost_delta_usd": 0.0,
+                }
+            by_region[region]["count"] += 1
+            by_region[region]["total_carbon_delta_kg"] += rec.est_carbon_delta_kg
+            by_region[region]["total_cost_delta_usd"] += rec.est_cost_delta_usd
+
+        total_carbon_delta = sum(r.est_carbon_delta_kg for r in batch_proposals)
+        total_cost_delta = sum(r.est_cost_delta_usd for r in batch_proposals)
+        by_risk = {}
+        for r in batch_proposals:
+            by_risk[r.risk_level] = by_risk.get(r.risk_level, 0) + 1
+
+        structured_data = {
+            "total_recommendations": len(batch_proposals),
+            "total_carbon_delta_kg": round(total_carbon_delta, 4),
+            "total_cost_delta_usd": round(total_cost_delta, 4),
+            "by_region": {k: {
+                "count": v["count"],
+                "total_carbon_delta_kg": round(v["total_carbon_delta_kg"], 4),
+                "total_cost_delta_usd": round(v["total_cost_delta_usd"], 4),
+            } for k, v in by_region.items()},
+            "by_risk_level": by_risk,
+        }
+
+        # LLM generates strategic rationale
+        system_prompt = (
+            f"{self.get_system_prompt()}\n\n"
+            f"You are participating in a multi-agent planning discussion.\n"
+            f"Review the dialogue below and respond from YOUR perspective.\n"
+            f"You MUST reference specific numbers from the data.\n"
+            f"Keep responses under 150 words. Be direct."
+        )
+        user_prompt = (
+            f"Summarize this batch strategy for governance review:\n"
+            f"Total recommendations: {len(batch_proposals)}\n"
+            f"Total carbon reduction: {total_carbon_delta*1000:.1f} gCO₂e\n"
+            f"Total cost change: ${total_cost_delta:+.2f}\n"
+            f"By region: {by_region}\n"
+            f"By risk: {by_risk}\n\n"
+            f"Why is this batch a sound optimization strategy?"
+        )
+        rationale = self.llm.chat(system_prompt, user_prompt)
+        self.memory.add_reasoning("batch_proposal", rationale)
+
+        return AgentMessage(
+            from_agent=self.name,
+            to_agent="Governance Agent",
+            message_type=MessageType.PROPOSAL,
+            subject="Batch Optimization Strategy Proposal",
+            content=rationale,
+            structured_data=structured_data,
+            round_number=0,
+        )
 
     def _plan_single_job(
         self, job: Job, intensity_df: pd.DataFrame, time_resolution: int,

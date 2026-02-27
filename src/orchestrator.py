@@ -40,6 +40,8 @@ from src.agents.governance import GovernanceAgent, decisions_to_dataframe, summa
 from src.agents.executor import ExecutorAgent, executions_to_dataframe, generate_mock_ticket_body
 from src.agents.verifier import verify_batch, verifications_to_dataframe, summarize_verification, format_evidence_chain
 from src.agents.copilot import CopilotAgent, points_to_dataframe
+from src.shared.protocol import Dialogue, AgentMessage, MessageType
+from src.shared.impact import compute_business_impact
 
 
 class Orchestrator:
@@ -59,6 +61,9 @@ class Orchestrator:
 
         # Collected traces from all agents
         self.agent_traces = {}
+
+        # Collected dialogues for audit trail
+        self.dialogues: list = []
 
         self._log(f"Orchestrator initialized with LLM provider: {self.llm.provider}")
         self._log(f"Agents: Planner, Governance, Executor, Verifier (deterministic), Copilot")
@@ -134,9 +139,13 @@ class Orchestrator:
         self._log(f"  Carbon delta: {rec_summary.get('total_carbon_delta_kg', 0)*1000:.1f} gCO₂e")
 
         # ── DECIDE: Governance Agent (LLM + deterministic) ────────────
-        self._subsection("Governance Agent")
+        self._subsection("Governance Agent — Negotiated Planning")
 
         t0 = time.time()
+        dialogue = self._negotiate_plan(recommendations, intensity_df)
+        self.dialogues.append(dialogue)
+
+        # Fall through to standard governance for per-recommendation decisions
         gov_result = self.governance.run({
             "recommendations": recommendations,
             "seed": seed,
@@ -148,6 +157,7 @@ class Orchestrator:
         gov_summary = summarize_governance(gov_decisions)
         self._log(f"Governance: {gov_summary['approved']}/{gov_summary['total']} approved "
                   f"({gov_summary['approval_rate']}%) in {time.time()-t0:.1f}s")
+        self._log(f"  Dialogue: {dialogue.total_rounds} negotiation rounds, outcome: {dialogue.outcome}")
 
         # ── ACT: Executor Agent (LLM + deterministic) ─────────────────
         self._section("Step 4: ACT — Executor Agent")
@@ -277,8 +287,20 @@ class Orchestrator:
             json.dump(self.agent_traces, f, indent=2, default=str)
         self._log(f"  data/agent_traces.json (reasoning traces for all agents)")
 
+        # Agent dialogues JSON
+        dialogue_records = [d.to_audit_record() for d in self.dialogues]
+        with open("data/agent_dialogues.json", "w") as f:
+            json.dump(dialogue_records, f, indent=2, default=str)
+        self._log(f"  data/agent_dialogues.json ({len(dialogue_records)} dialogues)")
+
         # Pipeline summary
         post_cost = post_jobs_df["cost_usd"].sum()
+        cost_change = round(post_cost - total_baseline_cost, 2)
+        impact = compute_business_impact(
+            kg_co2e_saved=actual_reduction,
+            cost_change_usd=cost_change,
+            total_cloud_spend=total_baseline_cost,
+        )
         summary = {
             "timestamp": datetime.now().isoformat(),
             "llm_provider": self.llm.provider,
@@ -297,14 +319,16 @@ class Orchestrator:
             "improvement": {
                 "emissions_reduction_kgco2e": round(actual_reduction, 4),
                 "emissions_reduction_pct": round(actual_reduction / total_baseline_kgco2e * 100, 1),
-                "cost_change_usd": round(post_cost - total_baseline_cost, 2),
+                "cost_change_usd": cost_change,
             },
+            "impact": impact,
             "pipeline": {
                 "recommendations_generated": len(recommendations),
                 "recommendations_approved": len(approved_recs),
                 "recommendations_executed": len(exec_records),
                 "verifications_completed": len(verifications),
                 "verification_summary": verify_summary,
+                "negotiation_dialogues": len(self.dialogues),
             },
             "gamification": {
                 "total_points_awarded": total_points,
@@ -330,6 +354,80 @@ class Orchestrator:
         self._log(f"Dashboard: streamlit run dashboard.py")
 
         return summary
+
+    def _negotiate_plan(self, recommendations: list, intensity_df) -> "Dialogue":
+        """
+        Mediate a multi-round dialogue between Planner and Governance agents.
+
+        Flow:
+          Round 0: Planner creates a batch-level proposal
+          Round 1+: Governance reviews, Planner responds to challenges
+          Stops when consensus is reached or max_rounds is hit
+
+        Args:
+            recommendations: list of Recommendation objects from PlannerAgent
+            intensity_df: carbon intensity DataFrame
+
+        Returns:
+            Dialogue object with full audit trail
+        """
+        try:
+            from config import Config
+            max_rounds = Config.MAX_NEGOTIATION_ROUNDS
+        except Exception:
+            max_rounds = 4
+
+        dialogue = Dialogue(
+            topic="Batch Optimization Strategy",
+            participating_agents=[self.planner.name, self.governance.name],
+            max_rounds=max_rounds,
+        )
+
+        self._log(f"  Starting negotiation: up to {max_rounds} rounds")
+
+        if not recommendations:
+            dialogue.outcome = "skipped — no recommendations to negotiate"
+            return dialogue
+
+        # Round 0: Planner proposes batch strategy
+        proposal = self.planner.propose_batch_strategy(recommendations, intensity_df)
+        proposal.round_number = 0
+        dialogue.add_message(proposal)
+        self._log(f"  Round 0: Planner proposed batch ({proposal.structured_data.get('total_recommendations', 0)} recs)")
+
+        current_message = proposal
+
+        for round_num in range(1, max_rounds + 1):
+            # Governance responds
+            gov_response = self.governance.review_proposal(current_message, dialogue)
+            gov_response.round_number = round_num
+            dialogue.add_message(gov_response)
+            self._log(f"  Round {round_num}: Governance → {gov_response.message_type.value}")
+
+            if gov_response.message_type == MessageType.APPROVAL:
+                dialogue.outcome = "consensus"
+                dialogue.final_plan = current_message.structured_data
+                break
+
+            if gov_response.message_type == MessageType.REJECTION:
+                dialogue.outcome = "rejected"
+                break
+
+            # Planner responds to challenge
+            if round_num < max_rounds:
+                planner_response = self.planner.respond_to(gov_response, dialogue)
+                dialogue.add_message(planner_response)
+                self._log(f"  Round {planner_response.round_number}: Planner → {planner_response.message_type.value}")
+                current_message = planner_response
+            else:
+                dialogue.outcome = "max_rounds_reached"
+                break
+
+        if not dialogue.outcome:
+            dialogue.outcome = "max_rounds_reached"
+
+        self._log(f"  Negotiation complete: {dialogue.total_rounds} rounds, outcome: {dialogue.outcome}")
+        return dialogue
 
     def _section(self, title):
         if self.verbose:
