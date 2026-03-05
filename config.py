@@ -39,6 +39,7 @@ class Config:
     # Planner constraints
     MIN_CARBON_REDUCTION_PCT = float(os.getenv("MIN_CARBON_REDUCTION_PCT", "10.0"))
     MAX_COST_INCREASE_PCT = float(os.getenv("MAX_COST_INCREASE_PCT", "20.0"))
+    MAX_LLM_RATIONALES = int(os.getenv("MAX_LLM_RATIONALES", "50"))
 
     # Governance circuit breakers
     MAX_RECOMMENDATIONS_PER_BATCH = int(os.getenv("MAX_RECS_PER_BATCH", "6000"))

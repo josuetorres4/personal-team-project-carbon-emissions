@@ -34,10 +34,12 @@ try:
     _CARBON_PRICE_PER_TON = _Config.CARBON_PRICE_PER_TON
     _MIN_CARBON_REDUCTION_PCT = _Config.MIN_CARBON_REDUCTION_PCT
     _MAX_COST_INCREASE_PCT = _Config.MAX_COST_INCREASE_PCT
+    _MAX_LLM_RATIONALES = _Config.MAX_LLM_RATIONALES
 except Exception:
     _CARBON_PRICE_PER_TON = 75.0
     _MIN_CARBON_REDUCTION_PCT = 10.0
     _MAX_COST_INCREASE_PCT = 20.0
+    _MAX_LLM_RATIONALES = 50
 
 
 # ── Planner configuration ────────────────────────────────────────────
@@ -47,6 +49,7 @@ CARBON_PRICE_PER_KG = CARBON_PRICE_PER_TON / 1000
 REQUIRE_CARBON_REDUCTION = True
 MIN_CARBON_REDUCTION_PCT = _MIN_CARBON_REDUCTION_PCT
 MAX_COST_INCREASE_PCT = _MAX_COST_INCREASE_PCT
+MAX_LLM_RATIONALES = _MAX_LLM_RATIONALES
 
 DEFERRAL_WINDOWS = {
     WorkloadCategory.URGENT: timedelta(hours=0),
@@ -144,6 +147,7 @@ Do NOT recommend shifts that save less than 5% carbon.
         intensity_df = task["intensity_df"]
         time_resolution = task.get("time_resolution_hours", 4)
         verbose = task.get("verbose", False)
+        self.verbose = verbose
 
         # Step 1: Agent reasons about the task
         self.memory.add_reasoning("task_received",
@@ -187,7 +191,8 @@ Do NOT recommend shifts that save less than 5% carbon.
         self._enrich_with_llm_rationales(recommendations)
 
         self.memory.add_reasoning("rationales_generated",
-            f"LLM generated explanations for {len(recommendations)} recommendations.")
+            f"LLM generated explanations for top {min(MAX_LLM_RATIONALES, len(recommendations))} recommendations. "
+            f"Remaining {max(0, len(recommendations) - MAX_LLM_RATIONALES)} used deterministic rationales.")
 
         return {
             "recommendations": recommendations,
@@ -201,7 +206,15 @@ Do NOT recommend shifts that save less than 5% carbon.
         }
 
     def _enrich_with_llm_rationales(self, recommendations: list[Recommendation]):
-        """Use LLM to generate human-readable rationales for recommendations."""
+        """Use LLM to generate human-readable rationales for top recommendations.
+        
+        To avoid blocking for a long time on thousands of individual LLM calls,
+        only the top MAX_LLM_RATIONALES recommendations (by carbon impact) get
+        individual LLM rationales.  The rest receive a fast deterministic template.
+        """
+        if not recommendations:
+            return
+
         system_prompt = (
             "You are the Planner Agent in a carbon optimization system. "
             "Given the details of a workload optimization recommendation, "
@@ -210,7 +223,18 @@ Do NOT recommend shifts that save less than 5% carbon.
             "Never exaggerate. If the savings are small, say so honestly."
         )
 
-        for rec in recommendations:
+        # Sort by carbon impact (most negative = biggest reduction first)
+        sorted_recs = sorted(recommendations, key=lambda r: r.est_carbon_delta_kg)
+        llm_limit = min(MAX_LLM_RATIONALES, len(sorted_recs))
+        llm_recs = sorted_recs[:llm_limit]
+        template_recs = sorted_recs[llm_limit:]
+
+        if self.verbose:
+            print(f"  Generating LLM rationales for top {llm_limit} recommendations "
+                  f"({len(template_recs)} will use deterministic rationale)...")
+
+        # LLM rationales for top recommendations
+        for i, rec in enumerate(llm_recs):
             context = (
                 f"action_type: {rec.action_type}\n"
                 f"current_region: {rec.current_region}\n"
@@ -221,6 +245,20 @@ Do NOT recommend shifts that save less than 5% carbon.
                 f"confidence: {rec.confidence:.0%}\n"
             )
             rec.rationale = self.reason(system_prompt, context)
+
+            if self.verbose and (i + 1) % 10 == 0:
+                print(f"  LLM rationales: {i + 1} / {llm_limit} complete...")
+
+        # Deterministic rationales for remaining recommendations
+        for rec in template_recs:
+            rec.rationale = (
+                f"Shifting {rec.action_type.replace('_', ' ')} from {rec.current_region} "
+                f"to {rec.proposed_region} saves {abs(rec.est_carbon_delta_kg * 1000):.1f} gCO₂e "
+                f"(cost delta: ${rec.est_cost_delta_usd:+.4f}, confidence: {rec.confidence:.0%})."
+            )
+
+        if self.verbose:
+            print(f"  Rationale enrichment complete: {llm_limit} LLM + {len(template_recs)} deterministic")
 
     def propose_batch_strategy(self, batch_proposals: list, intensity_df) -> "AgentMessage":
         """
