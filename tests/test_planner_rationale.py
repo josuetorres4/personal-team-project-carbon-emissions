@@ -36,14 +36,12 @@ class TestEnrichWithLLMRationales:
 
     def test_empty_list_does_nothing(self):
         agent = PlannerAgent()
-        agent.verbose = False
         agent._enrich_with_llm_rationales([])
         # No error, no LLM calls
 
     def test_small_batch_all_get_llm_rationales(self):
         """When recommendations < MAX_LLM_RATIONALES, all get LLM rationales."""
         agent = PlannerAgent()
-        agent.verbose = False
         recs = [_make_rec(-0.01, f"j{i}") for i in range(5)]
 
         agent._enrich_with_llm_rationales(recs)
@@ -60,7 +58,6 @@ class TestEnrichWithLLMRationales:
         """When recommendations > MAX_LLM_RATIONALES, excess get template rationales."""
         n = MAX_LLM_RATIONALES + 20
         agent = PlannerAgent()
-        agent.verbose = False
 
         # Create recs with varying carbon deltas so sorting is meaningful
         recs = [_make_rec(-0.001 * (i + 1), f"j{i}") for i in range(n)]
@@ -81,7 +78,6 @@ class TestEnrichWithLLMRationales:
     def test_top_impact_recs_get_llm_rationales(self):
         """The most impactful recommendations (most negative carbon delta) get LLM rationales."""
         agent = PlannerAgent()
-        agent.verbose = False
 
         # 3 high-impact + many low-impact, with MAX_LLM_RATIONALES = 50
         recs = []
@@ -104,7 +100,6 @@ class TestEnrichWithLLMRationales:
     def test_template_rationale_contains_useful_info(self):
         """Template rationales should include action type, regions, and savings."""
         agent = PlannerAgent()
-        agent.verbose = False
 
         n = MAX_LLM_RATIONALES + 5
         recs = [_make_rec(-0.001, f"j{i}") for i in range(n)]
@@ -116,18 +111,17 @@ class TestEnrichWithLLMRationales:
 
         for rec in template_recs:
             assert "us-east-1" in rec.rationale or "eu-north-1" in rec.rationale
-            assert "gCO" in rec.rationale  # Contains carbon info
+            assert "gCO\u2082e" in rec.rationale  # Contains carbon info (gCO₂e)
             assert "cost delta" in rec.rationale
 
     def test_verbose_progress_output(self, capsys):
         """When verbose=True, progress messages are printed."""
         agent = PlannerAgent()
-        agent.verbose = True
 
         n = MAX_LLM_RATIONALES + 10
         recs = [_make_rec(-0.001 * (i + 1), f"j{i}") for i in range(n)]
 
-        agent._enrich_with_llm_rationales(recs)
+        agent._enrich_with_llm_rationales(recs, verbose=True)
 
         captured = capsys.readouterr()
         assert "Generating LLM rationales" in captured.out

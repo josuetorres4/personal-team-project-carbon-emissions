@@ -147,7 +147,6 @@ Do NOT recommend shifts that save less than 5% carbon.
         intensity_df = task["intensity_df"]
         time_resolution = task.get("time_resolution_hours", 4)
         verbose = task.get("verbose", False)
-        self.verbose = verbose
 
         # Step 1: Agent reasons about the task
         self.memory.add_reasoning("task_received",
@@ -188,7 +187,7 @@ Do NOT recommend shifts that save less than 5% carbon.
             f"Skipped {skipped} (urgent or already in clean regions).")
 
         # Step 3: LLM generates rationales for top recommendations
-        self._enrich_with_llm_rationales(recommendations)
+        self._enrich_with_llm_rationales(recommendations, verbose=verbose)
 
         self.memory.add_reasoning("rationales_generated",
             f"LLM generated explanations for top {min(MAX_LLM_RATIONALES, len(recommendations))} recommendations. "
@@ -205,7 +204,7 @@ Do NOT recommend shifts that save less than 5% carbon.
             "trace": self.get_trace(),
         }
 
-    def _enrich_with_llm_rationales(self, recommendations: list[Recommendation]):
+    def _enrich_with_llm_rationales(self, recommendations: list[Recommendation], verbose: bool = False):
         """Use LLM to generate human-readable rationales for top recommendations.
         
         To avoid blocking for a long time on thousands of individual LLM calls,
@@ -229,7 +228,7 @@ Do NOT recommend shifts that save less than 5% carbon.
         llm_recs = sorted_recs[:llm_limit]
         template_recs = sorted_recs[llm_limit:]
 
-        if self.verbose:
+        if verbose:
             print(f"  Generating LLM rationales for top {llm_limit} recommendations "
                   f"({len(template_recs)} will use deterministic rationale)...")
 
@@ -246,7 +245,7 @@ Do NOT recommend shifts that save less than 5% carbon.
             )
             rec.rationale = self.reason(system_prompt, context)
 
-            if self.verbose and (i + 1) % 10 == 0:
+            if verbose and (i + 1) % 10 == 0:
                 print(f"  LLM rationales: {i + 1} / {llm_limit} complete...")
 
         # Deterministic rationales for remaining recommendations
@@ -257,7 +256,7 @@ Do NOT recommend shifts that save less than 5% carbon.
                 f"(cost delta: ${rec.est_cost_delta_usd:+.4f}, confidence: {rec.confidence:.0%})."
             )
 
-        if self.verbose:
+        if verbose:
             print(f"  Rationale enrichment complete: {llm_limit} LLM + {len(template_recs)} deterministic")
 
     def propose_batch_strategy(self, batch_proposals: list, intensity_df) -> "AgentMessage":
