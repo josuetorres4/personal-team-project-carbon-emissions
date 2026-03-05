@@ -79,6 +79,7 @@ with st.sidebar:
 
     st.divider()
     page = st.radio("Navigation", [
+        "🌍 Your Impact This Week",
         "Overview",
         "Carbon Analysis",
         "Optimization Results",
@@ -91,6 +92,93 @@ with st.sidebar:
         "🌍 The Impact",
         "💬 Ask the Agent",
     ])
+
+# Equivalency calculations for impact page
+def carbon_to_equivalencies(kg: float) -> dict:
+    return {
+        "miles_not_driven": round(kg * 2.47, 1),          # EPA: 0.404 kgCO2/mile
+        "phones_charged": round(kg * 121.6, 0),            # EPA: 0.00822 kg/charge
+        "trees_for_a_year": round(kg / 21.77, 2),          # EPA: 21.77 kg/tree/year
+        "coal_not_burned_grams": round(kg * 1000 / 2.42, 0),
+        "hours_of_netflix": round(kg / 0.036, 1),          # 36g CO2/hour streaming
+        "flights_avoided_minutes": round(kg / 0.255, 1),   # 255g CO2/passenger-mile, ~6mi/min
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════
+# PAGE: Your Impact This Week
+# ══════════════════════════════════════════════════════════════════════
+if page == "🌍 Your Impact This Week":
+    st.title("🌍 What You Actually Did for the Planet")
+
+    # Load proof-of-impact data if available
+    poi_path = f"{DATA_DIR}/proof_of_impact.json"
+    if os.path.exists(poi_path):
+        with open(poi_path) as f:
+            poi = json.load(f)
+
+        total_kg = sum(p.get("carbon_saving_kg", 0) for p in poi if p.get("saving_is_significant"))
+        eq = carbon_to_equivalencies(total_kg)
+
+        # Hero metric — big, emotional, clear
+        st.markdown(f"""
+        <div style="text-align: center; padding: 2rem; background: linear-gradient(135deg, #1a5e1a, #2d8f2d); border-radius: 1rem; margin-bottom: 2rem;">
+            <h1 style="color: white; font-size: 3rem; margin: 0;">{total_kg:.1f} kg CO₂e</h1>
+            <p style="color: #b8e6b8; font-size: 1.2rem;">Verified carbon saved this period</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Real-world equivalencies
+        col1, col2, col3 = st.columns(3)
+        col1.metric("🚗 Miles not driven", f"{eq['miles_not_driven']:,}")
+        col2.metric("📱 Phones charged", f"{int(eq['phones_charged']):,}")
+        col3.metric("🌳 Trees working for a year", f"{eq['trees_for_a_year']}")
+
+        col4, col5 = st.columns(2)
+        col4.metric("🏭 Coal not burned", f"{int(eq['coal_not_burned_grams']):,}g")
+        col5.metric("✈️ Flight time avoided", f"{eq['flights_avoided_minutes']:.0f} min")
+
+        # CSRD readiness indicator
+        st.subheader("📋 CSRD Filing Readiness")
+        significant_count = sum(1 for p in poi if p.get("saving_is_significant"))
+        real_data_count = sum(1 for p in poi if p.get("is_real_data"))
+
+        st.progress(significant_count / max(len(poi), 1),
+                    text=f"{significant_count}/{len(poi)} savings are audit-ready")
+
+        if real_data_count == len(poi) and len(poi) > 0:
+            st.success("✅ All savings computed from real grid data — suitable for CSRD Scope 2 disclosure")
+        elif len(poi) > 0:
+            st.warning(f"⚠️ {len(poi)-real_data_count} savings use synthetic data — not suitable for regulatory filing")
+
+        # Carbon market summary
+        market_path = f"{DATA_DIR}/carbon_market.json"
+        if os.path.exists(market_path):
+            with open(market_path) as f:
+                market_data = json.load(f)
+            st.subheader("💱 Carbon Market Summary")
+            ms = market_data.get("market_summary", {})
+            col6, col7, col8 = st.columns(3)
+            col6.metric("Teams", ms.get("total_teams", 0))
+            col7.metric("Trades Approved", ms.get("total_trades_approved", 0))
+            col8.metric("Carbon Credits (USD)", f"${ms.get('total_carbon_credits_usd', 0):.2f}")
+
+        # Download evidence
+        from pathlib import Path as _Path
+        evidence_dir = _Path("data/evidence_cards")
+        if evidence_dir.exists() and list(evidence_dir.glob("*.pdf")):
+            if st.button("📥 Download All Evidence Cards (ZIP)"):
+                import zipfile
+                import io
+                buf = io.BytesIO()
+                with zipfile.ZipFile(buf, "w") as z:
+                    for pdf in evidence_dir.glob("*.pdf"):
+                        z.write(pdf, pdf.name)
+                buf.seek(0)
+                st.download_button("Download ZIP", buf.getvalue(), "evidence_cards.zip")
+    else:
+        st.info("No proof-of-impact data available yet. Run `python run_pipeline.py` first.")
+
 
 # ══════════════════════════════════════════════════════════════════════
 # PAGE: Overview
@@ -681,7 +769,8 @@ elif page == "Agent Reasoning":
         llm_provider = summary.get("llm_provider", "unknown")
         if llm_provider == "mock":
             st.info("**LLM Mode: Mock** — The system ran with a deterministic mock LLM. "
-                    "To use a real LLM, set `OPENAI_API_KEY` and re-run the pipeline. "
+                    "To use a real LLM, set `GROQ_API_KEY` (free at console.groq.com) or "
+                    "`OPENAI_API_KEY` and re-run the pipeline. "
                     "The mock produces structured, contextually appropriate responses "
                     "for development and demo purposes.")
         else:
@@ -957,7 +1046,7 @@ elif page == "💬 Ask the Agent":
     if llm_provider == "mock":
         st.info(
             "🤖 **Demo mode** — responses are generated by the built-in mock LLM. "
-            "Set `OPENAI_API_KEY` and re-run `python run_pipeline.py` for GPT-powered answers."
+            "Set `GROQ_API_KEY` (free) or `OPENAI_API_KEY` and re-run `python run_pipeline.py` for LLM-powered answers."
         )
     else:
         st.success(f"✅ **Live mode** — using {llm_provider} for responses.")

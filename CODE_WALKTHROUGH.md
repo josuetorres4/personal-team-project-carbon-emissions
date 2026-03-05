@@ -428,9 +428,11 @@ is described inline in `config.py`. No code changes needed.
 
 ### Replacing the mock LLM with a real one
 
-Set `OPENAI_API_KEY` in your environment or `.env` file. The `LLMProvider` in
-`src/agents/base.py` auto-detects the key and switches to `gpt-4o-mini`. The
-`provider` attribute is logged at startup so you can verify which path is active.
+Set either `GROQ_API_KEY` or `OPENAI_API_KEY` in your environment or `.env` file.
+The `LLMProvider` in `src/agents/base.py` auto-detects the key and picks the
+appropriate backend (Groq uses `llama-3.3-70b-versatile` by default, OpenAI uses
+`gpt-4o-mini`). The `provider` attribute is logged at startup so you can verify
+which path is active. Groq offers a free tier at [console.groq.com](https://console.groq.com).
 
 ### Replacing the synthetic workloads with real data
 

@@ -38,22 +38,37 @@ _DIALOGUE_KEYWORDS = ("multi-agent", "dialogue", "respond", "assessment", "plann
 
 class LLMProvider:
     """
-    Wrapper for LLM calls. Supports OpenAI API or falls back to a
-    local mock for development/testing without API keys.
+    Wrapper for LLM calls. Supports OpenAI API, Groq API (OpenAI-compatible),
+    or falls back to a local mock for development/testing without API keys.
     """
 
     def __init__(self, provider: str = "auto"):
         """
         Args:
-            provider: "openai", "mock", or "auto" (try openai, fall back to mock)
+            provider: "openai", "groq", "mock", or "auto"
+                      (auto tries groq first, then openai, then mock)
         """
         self.provider = provider
         self._client = None
-        self._model = "gpt-4o-mini"
+        self._model = os.environ.get("LLM_MODEL", "gpt-4o-mini")
         if provider == "auto":
-            if os.environ.get("OPENAI_API_KEY"):
+            if os.environ.get("GROQ_API_KEY"):
+                self.provider = "groq"
+            elif os.environ.get("OPENAI_API_KEY"):
                 self.provider = "openai"
             else:
+                self.provider = "mock"
+
+        if self.provider == "groq":
+            try:
+                from openai import OpenAI
+                self._client = OpenAI(
+                    api_key=os.environ["GROQ_API_KEY"],
+                    base_url="https://api.groq.com/openai/v1",
+                )
+                self._model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+            except Exception:
+                print("  [LLM] Groq not available, falling back to mock")
                 self.provider = "mock"
 
         if self.provider == "openai":
@@ -66,10 +81,14 @@ class LLMProvider:
 
     def chat(self, system_prompt: str, user_message: str, temperature: float = 0.3) -> str:
         """Send a chat completion request."""
-        if self.provider == "openai":
+        if self.provider in ("openai", "groq"):
             return self._chat_openai(system_prompt, user_message, temperature)
         else:
             return self._chat_mock(system_prompt, user_message)
+
+    def complete(self, prompt: str, temperature: float = 0.3) -> str:
+        """Single-prompt completion (convenience wrapper around chat)."""
+        return self.chat("You are a helpful assistant.", prompt, temperature)
 
     def _chat_openai(self, system_prompt: str, user_message: str, temperature: float) -> str:
         response = self._client.chat.completions.create(
@@ -240,13 +259,14 @@ class LLMProvider:
                 "~415 gCO₂/kWh (coal + gas), and ap-south-1 (Mumbai) at ~700 gCO₂/kWh (coal). "
                 "The **Carbon Analysis** heatmap shows how intensity varies hour-by-hour within each region."
             )
-        elif any(w in msg for w in ["mock", "llm", "openai", "gpt", "api", "key", "real"]):
+        elif any(w in msg for w in ["mock", "llm", "openai", "gpt", "api", "key", "real", "groq"]):
             return (
-                "The system works fully without an API key — the mock LLM generates structured, "
+                "The system works fully without an API key \u2014 the mock LLM generates structured, "
                 "contextually appropriate responses for all agent tasks. "
-                "To use a real LLM, set `OPENAI_API_KEY` in your `.env` file and re-run "
-                "`python run_pipeline.py`. The system will automatically switch to GPT-4o-mini. "
-                "All *numbers* are computed deterministically regardless of which LLM is used — "
+                "To use a real LLM, set either `GROQ_API_KEY` (free at console.groq.com) or "
+                "`OPENAI_API_KEY` in your `.env` file and re-run "
+                "`python run_pipeline.py`. The system auto-detects which key is available. "
+                "All *numbers* are computed deterministically regardless of which LLM is used \u2014 "
                 "the LLM only explains and communicates, never calculates."
             )
         else:

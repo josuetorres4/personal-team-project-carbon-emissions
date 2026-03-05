@@ -1,6 +1,6 @@
 # sust-AI-naible 🌍
 
-> **Multi-agent cloud carbon optimization** — a system that watches cloud workloads, calculates their carbon footprint, recommends cheaper+greener scheduling, executes those changes, and *proves* the savings were real using counterfactual analysis.
+> **sust-AI-naible** — The first AI system that turns carbon into a tradeable internal currency: engineering teams compete to be green, your CFO gets auditable proof, and your CSRD filing writes itself.
 
 ---
 
@@ -71,6 +71,7 @@ That's it. The pipeline generates synthetic data, runs all agents, and saves res
 | Python | 3.11+ | Required for `list[str]` type hints |
 | pip | any recent | Comes with Python |
 | OpenAI API key | optional | Without it the system uses a built-in mock LLM |
+| Groq API key | optional | Free alternative to OpenAI -- get a key at [console.groq.com](https://console.groq.com) |
 
 ---
 
@@ -104,7 +105,8 @@ cp .env.example .env
 ```
 # .env.example
 OPENAI_API_KEY=your-key-here   # Remove this line to use mock LLM
-LLM_PROVIDER=auto              # "auto" | "openai" | "mock"
+GROQ_API_KEY=                  # Free alternative — get key at console.groq.com
+LLM_PROVIDER=auto              # "auto" | "openai" | "groq" | "mock"
 LLM_MODEL=gpt-4o-mini
 
 SIM_DAYS=30                    # Days of synthetic workloads to simulate
@@ -154,8 +156,11 @@ Saves `data/baseline_results.csv` and `data/carbon_intensity.csv`.
 Runs all 6 agents end-to-end and produces every output file the dashboard needs.
 
 ```bash
-# Without an OpenAI key — uses built-in mock LLM
+# Without an API key — uses built-in mock LLM
 python run_pipeline.py
+
+# With a Groq key (free) — uses Llama 3.3 70B
+GROQ_API_KEY=gsk_... python run_pipeline.py
 
 # With an OpenAI key — uses real GPT-4o-mini
 OPENAI_API_KEY=sk-... python run_pipeline.py
@@ -290,7 +295,25 @@ All 50 tests should pass without any API key or network access.
 
 ## How the LLM is Used
 
-The system works **fully without an API key** — the mock LLM generates contextually appropriate responses for all agent tasks. When `OPENAI_API_KEY` is set, it switches to real GPT-4o-mini calls automatically.
+The system works **fully without an API key** — the mock LLM generates contextually appropriate responses for all agent tasks. When `GROQ_API_KEY` or `OPENAI_API_KEY` is set, it switches to a real LLM automatically.
+
+**Supported LLM providers:**
+
+| Provider | Env variable | Default model | Notes |
+|----------|-------------|---------------|-------|
+| Groq | `GROQ_API_KEY` | `llama-3.3-70b-versatile` | Free tier available at [console.groq.com](https://console.groq.com) |
+| OpenAI | `OPENAI_API_KEY` | `gpt-4o-mini` | Paid API |
+| Mock | *(none needed)* | — | Built-in, works offline |
+
+When `LLM_PROVIDER=auto` (the default), the system checks for `GROQ_API_KEY` first, then `OPENAI_API_KEY`, and falls back to the mock if neither is set.
+
+### How to add your API key
+
+1. Copy the example env file: `cp .env.example .env`
+2. Open `.env` and paste your key:
+   - **Groq (free):** Set `GROQ_API_KEY=gsk_your_key_here`
+   - **OpenAI:** Set `OPENAI_API_KEY=sk-your_key_here`
+3. Re-run the pipeline: `python run_pipeline.py`
 
 The LLM handles:
 - Generating human-readable rationales for recommendations
