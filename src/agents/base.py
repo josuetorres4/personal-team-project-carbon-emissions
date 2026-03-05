@@ -261,12 +261,12 @@ class LLMProvider:
             )
         elif any(w in msg for w in ["mock", "llm", "openai", "gpt", "api", "key", "real", "groq"]):
             return (
-                "The system works fully without an API key -- the mock LLM generates structured, "
+                "The system works fully without an API key \u2014 the mock LLM generates structured, "
                 "contextually appropriate responses for all agent tasks. "
                 "To use a real LLM, set either `GROQ_API_KEY` (free at console.groq.com) or "
                 "`OPENAI_API_KEY` in your `.env` file and re-run "
                 "`python run_pipeline.py`. The system auto-detects which key is available. "
-                "All *numbers* are computed deterministically regardless of which LLM is used -- "
+                "All *numbers* are computed deterministically regardless of which LLM is used \u2014 "
                 "the LLM only explains and communicates, never calculates."
             )
         else:
