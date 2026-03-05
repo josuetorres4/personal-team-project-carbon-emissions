@@ -30,6 +30,15 @@ import pandas as pd
 from src.agents.base import BaseAgent, LLMProvider
 from src.shared.models import Job, Recommendation
 
+# Import Config for centralized settings, fall back to local defaults if unavailable
+try:
+    from config import Config as _Config
+    _MAX_LLM_TICKETS = _Config.MAX_LLM_TICKETS
+except Exception:
+    _MAX_LLM_TICKETS = 50
+
+MAX_LLM_TICKETS = _MAX_LLM_TICKETS
+
 
 @dataclass
 class ExecutionRecord:
@@ -108,6 +117,7 @@ class ExecutorAgent(BaseAgent):
 
         optimized_jobs = []
         execution_records = []
+        llm_ticket_count = 0
 
         for rec in approved_recs:
             original_job = job_map.get(rec.job_id)
@@ -117,8 +127,12 @@ class ExecutorAgent(BaseAgent):
             # Deterministic: apply the change
             new_job, record = self._apply_change(rec, original_job)
 
-            # LLM: generate ticket content
-            record.ticket_body = self._generate_ticket(rec, record)
+            # LLM: generate ticket content (capped to avoid token limit)
+            if llm_ticket_count < MAX_LLM_TICKETS:
+                record.ticket_body = self._generate_ticket(rec, record)
+                llm_ticket_count += 1
+            else:
+                record.ticket_body = self._generate_template_ticket(rec, record)
 
             optimized_jobs.append(new_job)
             execution_records.append(record)
@@ -127,7 +141,9 @@ class ExecutorAgent(BaseAgent):
         unchanged_jobs = [j for j in jobs if j.job_id not in rec_job_ids]
 
         self.memory.add_reasoning("execution_complete",
-            f"Executed {len(execution_records)} changes. "
+            f"Executed {len(execution_records)} changes "
+            f"({llm_ticket_count} LLM tickets, "
+            f"{len(execution_records) - llm_ticket_count} template tickets). "
             f"{len(unchanged_jobs)} jobs unchanged.")
 
         return {
@@ -191,6 +207,22 @@ class ExecutorAgent(BaseAgent):
             f"pr_url: {execution.mock_pr_url}\n"
         )
         return self.reason(system_prompt, context)
+
+    def _generate_template_ticket(self, rec: Recommendation, execution: ExecutionRecord) -> str:
+        """Deterministic: generate a template ticket when LLM call budget is exhausted."""
+        action = rec.action_type.replace("_", " ").title()
+        old_region = execution.old_config.get("region", "?")
+        new_region = execution.new_config.get("region", "?")
+        return (
+            f"## Sustainability Optimization: {action}\n\n"
+            f"**Change**: {old_region} -> {new_region}\n"
+            f"**Carbon delta**: {rec.est_carbon_delta_kg * 1000:.1f} gCO₂e\n"
+            f"**Cost delta**: ${rec.est_cost_delta_usd:+.4f}\n"
+            f"**Risk level**: {rec.risk_level.upper()}\n"
+            f"**Confidence**: {rec.confidence:.0%}\n\n"
+            f"Rollback: revert to original configuration if SLA degradation detected within 24h.\n"
+            f"Verification: Verifier Agent will assess actual savings via counterfactual analysis."
+        )
 
 
 # ── Convenience functions for pipeline compatibility ──────────────────
