@@ -19,6 +19,7 @@ The AI/Deterministic boundary:
 
 import json
 import os
+import time
 from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
@@ -91,16 +92,36 @@ class LLMProvider:
         return self.chat("You are a helpful assistant.", prompt, temperature)
 
     def _chat_openai(self, system_prompt: str, user_message: str, temperature: float) -> str:
-        response = self._client.chat.completions.create(
-            model=self._model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ],
-            temperature=temperature,
-            max_tokens=1024,
-        )
-        return response.choices[0].message.content
+        max_retries = 5
+        base_delay = 2.0
+        for attempt in range(max_retries):
+            try:
+                response = self._client.chat.completions.create(
+                    model=self._model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_message},
+                    ],
+                    temperature=temperature,
+                    max_tokens=1024,
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                error_str = str(e).lower()
+                is_rate_limit = (
+                    "rate_limit" in error_str
+                    or "rate limit" in error_str
+                    or "429" in error_str
+                    or "too many requests" in error_str
+                    or "token" in error_str and "limit" in error_str
+                )
+                if is_rate_limit and attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    print(f"  [LLM] Rate limit hit, retrying in {delay:.0f}s "
+                          f"(attempt {attempt + 1}/{max_retries})...")
+                    time.sleep(delay)
+                else:
+                    raise
 
     def _chat_mock(self, system_prompt: str, user_message: str) -> str:
         """

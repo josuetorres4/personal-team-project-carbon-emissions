@@ -37,10 +37,12 @@ try:
     _MAX_RECOMMENDATIONS_PER_BATCH = _Config.MAX_RECOMMENDATIONS_PER_BATCH
     _MAX_BATCH_COST_INCREASE = _Config.MAX_BATCH_COST_INCREASE
     _MAX_JOBS_PER_REGION = _Config.MAX_JOBS_PER_REGION_PER_BATCH
+    _MAX_LLM_RISK_ASSESSMENTS = _Config.MAX_LLM_RISK_ASSESSMENTS
 except Exception:
     _MAX_RECOMMENDATIONS_PER_BATCH = 6000
     _MAX_BATCH_COST_INCREASE = 500.0
     _MAX_JOBS_PER_REGION = 15
+    _MAX_LLM_RISK_ASSESSMENTS = 50
 
 
 # ── Governance configuration ──────────────────────────────────────────
@@ -50,6 +52,7 @@ SIMULATED_HIGH_RISK_APPROVAL_RATE = 0.85
 MAX_RECOMMENDATIONS_PER_BATCH = _MAX_RECOMMENDATIONS_PER_BATCH
 MAX_BATCH_COST_INCREASE = _MAX_BATCH_COST_INCREASE
 MAX_JOBS_PER_REGION_PER_BATCH = _MAX_JOBS_PER_REGION
+MAX_LLM_RISK_ASSESSMENTS = _MAX_LLM_RISK_ASSESSMENTS
 
 
 @dataclass
@@ -163,9 +166,12 @@ Think step by step through each principle. Then respond ONLY in this exact JSON:
         approved = []
         batch_count = 0
         batch_cost_increase = 0.0
+        llm_risk_count = 0
 
         for rec in recommendations:
-            decision = self._evaluate_single(rec, batch_count, batch_cost_increase, rng)
+            decision = self._evaluate_single(
+                rec, batch_count, batch_cost_increase, rng, llm_risk_count
+            )
             decisions.append(decision)
 
             if decision.decision == "approved":
@@ -177,9 +183,13 @@ Think step by step through each principle. Then respond ONLY in this exact JSON:
             else:
                 rec.status = "rejected"
 
+            if decision.llm_reasoning:
+                llm_risk_count += 1
+
         self.memory.add_reasoning("governance_complete",
             f"Approved {len(approved)} / {len(recommendations)}. "
-            f"Rejected {len(recommendations) - len(approved)}.")
+            f"Rejected {len(recommendations) - len(approved)}. "
+            f"LLM risk assessments: {llm_risk_count}.")
 
         return {
             "approved": approved,
@@ -346,7 +356,7 @@ Think step by step through each principle. Then respond ONLY in this exact JSON:
             round_number=proposal.round_number + 1,
         )
 
-    def _evaluate_single(self, rec, batch_count, batch_cost_increase, rng) -> GovernanceDecision:
+    def _evaluate_single(self, rec, batch_count, batch_cost_increase, rng, llm_risk_count=0) -> GovernanceDecision:
         """Evaluate a single recommendation: deterministic rules + LLM reasoning."""
         final_risk = self._assess_risk_deterministic(rec)
         decision_time = datetime.now()
@@ -364,9 +374,9 @@ Think step by step through each principle. Then respond ONLY in this exact JSON:
                 decided_by="governance_agent",
             )
 
-        # LLM: contextual risk assessment for medium/high risk
+        # LLM: contextual risk assessment for medium/high risk (capped to avoid token limit)
         llm_reasoning = ""
-        if final_risk in ("medium", "high"):
+        if final_risk in ("medium", "high") and llm_risk_count < MAX_LLM_RISK_ASSESSMENTS:
             system_prompt = (
                 "You are the Governance Agent assessing risk for a carbon optimization change. "
                 "Given the recommendation details, provide a brief risk assessment explaining "
