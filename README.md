@@ -1,6 +1,6 @@
 # sust-AI-naible 🌍
 
-> **Multi-agent cloud carbon optimization** — a system that watches cloud workloads, calculates their carbon footprint, recommends cheaper+greener scheduling, executes those changes, and *proves* the savings were real using counterfactual analysis.
+> **sust-AI-naible** — The first AI system that turns carbon into a tradeable internal currency: engineering teams compete to be green, your CFO gets auditable proof, and your CSRD filing writes itself.
 
 ---
 

@@ -50,3 +50,14 @@ class Config:
     # Simulation defaults
     DEFAULT_SIM_DAYS = int(os.getenv("SIM_DAYS", "30"))
     DEFAULT_SEED = int(os.getenv("SEED", "42"))
+
+    # Carbon Market
+    WEEKLY_CARBON_BUDGET_KG = float(os.getenv("WEEKLY_CARBON_BUDGET_KG", "500"))
+    INTERNAL_CARBON_PRICE_USD_PER_TON = float(os.getenv("CARBON_PRICE_PER_TON", "75"))
+    MAX_REPLAN_CYCLES = int(os.getenv("MAX_REPLAN_CYCLES", "2"))
+    MIN_CARBON_SAVING_PCT = float(os.getenv("MIN_CARBON_SAVING_PCT", "5"))
+
+    # Real data
+    USE_REAL_CARBON_DATA = os.getenv("USE_REAL_CARBON_DATA", "true").lower() == "true"
+    CARBON_DATA_CACHE_HOURS = int(os.getenv("CARBON_DATA_CACHE_HOURS", "6"))
+    ELECTRICITY_MAPS_API_TOKEN = os.getenv("ELECTRICITY_MAPS_API_TOKEN", "")

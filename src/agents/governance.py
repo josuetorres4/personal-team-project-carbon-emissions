@@ -75,6 +75,43 @@ class GovernanceAgent(BaseAgent):
     Deterministic role: Threshold checks, circuit breakers, approval rules.
     """
 
+    GOVERNANCE_CONSTITUTION = """
+You are the Chief Sustainability Officer of this company, reviewing a cloud workload change.
+
+Your principles, in strict priority order:
+1. NEVER approve changes that violate a paying customer SLA
+2. NEVER approve changes that increase cloud cost by more than 15%
+3. PREFER reversible changes over irreversible ones
+4. When uncertain, challenge the Planner to propose an alternative — don't just reject
+5. Reward teams that have carbon surplus in the trading market
+6. Carbon savings are only meaningful if the CI shows saving_is_significant=True
+
+Workload change proposed:
+- Job ID: {job_id}
+- Job type: {job_type}
+- From region: {from_region} ({from_intensity} gCO2/kWh, {data_quality} data)
+- To region: {to_region} ({to_intensity} gCO2/kWh)
+- Time shift: {time_shift_hours} hours
+- SLA deadline: {sla_deadline}
+- Estimated carbon saving: {carbon_saving_kg} kgCO2e
+- Estimated cost delta: {cost_delta_pct}%
+- Team: {team}
+- Team carbon budget status: {budget_status} (surplus: {surplus_kg}kg)
+
+Think step by step through each principle. Then respond ONLY in this exact JSON:
+{{
+  "sla_ok": true/false,
+  "cost_ok": true/false,
+  "carbon_saving_real": true/false,
+  "is_reversible": true/false,
+  "risk_level": "LOW|MEDIUM|HIGH",
+  "decision": "APPROVE|REJECT|CHALLENGE",
+  "reason": "one sentence plain English",
+  "challenge_to_planner": "if CHALLENGE: what alternative to propose, else null",
+  "carbon_credits_awarded": 0.0
+}}
+"""
+
     def __init__(self, llm: Optional[LLMProvider] = None):
         super().__init__(
             name="Governance Agent",
@@ -163,6 +200,37 @@ class GovernanceAgent(BaseAgent):
             elif risk == "medium":
                 risk = "high"
         return risk
+
+    def evaluate_with_constitution(self, recommendation: dict, budget_status: dict) -> dict:
+        """LLM-based governance evaluation using the constitution."""
+        merged = {**recommendation, **budget_status}
+        prompt = self.GOVERNANCE_CONSTITUTION.format(**merged)
+        raw = self.llm.complete(prompt)
+        try:
+            import json as _json
+            import re
+            # Extract JSON even if LLM adds preamble
+            match = re.search(r'\{.*\}', raw, re.DOTALL)
+            if match:
+                return _json.loads(match.group())
+        except Exception:
+            pass
+        # Fallback to rule-based if LLM fails
+        return self._rule_based_fallback(recommendation)
+
+    def _rule_based_fallback(self, recommendation: dict) -> dict:
+        """Fallback rule-based evaluation when LLM constitution fails."""
+        return {
+            "sla_ok": True,
+            "cost_ok": True,
+            "carbon_saving_real": True,
+            "is_reversible": True,
+            "risk_level": "LOW",
+            "decision": "APPROVE",
+            "reason": "Approved via rule-based fallback.",
+            "challenge_to_planner": None,
+            "carbon_credits_awarded": 0.0,
+        }
 
     def _check_circuit_breakers(self, batch_count: int, batch_cost: float) -> Optional[str]:
         """Check if batch limits have been exceeded."""

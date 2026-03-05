@@ -21,6 +21,11 @@ plotly>=5.15.0
 # Dashboard (Phase 6+)
 streamlit>=1.28.0
 
+# Real data & reporting
+requests>=2.31.0
+fpdf2>=2.7.0
+scipy>=1.11.0
+
 # Dev/Test
 pytest>=7.4.0
 python-dotenv>=1.0.0

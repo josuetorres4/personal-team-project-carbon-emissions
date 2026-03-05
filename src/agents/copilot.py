@@ -54,8 +54,48 @@ class CopilotAgent(BaseAgent):
     AI agent that interfaces with developer teams.
     
     LLM role: Generate summaries, nudges, explanations tailored to each team.
-    Deterministic role: Points calculation, leaderboard ranking.
+    Deterministic role: Points calculation, leaderboard ranking, carbon brokerage.
     """
+
+    BROKER_PROMPT = """
+You are a carbon market broker for an engineering organization.
+
+Current carbon budget status across teams:
+{budget_status_json}
+
+Teams in SURPLUS (could sell/give carbon budget):
+{surplus_teams}
+
+Teams in DEFICIT (need more carbon budget):
+{deficit_teams}
+
+This week's verified savings by team:
+{savings_by_team}
+
+Your job:
+1. Identify 1-3 fair trades that would help deficit teams without
+   penalizing surplus teams unfairly
+2. Write a short, motivating weekly summary for each team (2-3 sentences,
+   conversational tone — like a coach, not a report)
+3. Highlight the team that improved most this week
+
+Return ONLY this JSON:
+{{
+  "proposed_trades": [
+    {{
+      "from_team": "...",
+      "to_team": "...",
+      "kg": 0.0,
+      "rationale": "one sentence"
+    }}
+  ],
+  "team_summaries": {{
+    "TeamName": "2-3 sentence motivating message mentioning their specific numbers"
+  }},
+  "team_of_the_week": "TeamName",
+  "team_of_the_week_reason": "one sentence"
+}}
+"""
 
     def __init__(self, llm: Optional[LLMProvider] = None):
         super().__init__(
@@ -142,6 +182,56 @@ class CopilotAgent(BaseAgent):
             "leaderboard": leaderboard,
             "narratives": narratives,
             "trace": self.get_trace(),
+        }
+
+    def run_as_broker(self, market) -> dict:
+        """
+        Run as a carbon market broker: analyze budgets and propose trades.
+        
+        Args:
+            market: CarbonMarket instance
+        
+        Returns:
+            dict with proposed_trades, team_summaries, team_of_the_week
+        """
+        import json as _json
+
+        budget_status = market.to_dict()
+        surplus_teams = market.find_surplus_teams()
+        deficit_teams = market.find_deficit_teams()
+
+        # Compute savings by team
+        savings_by_team = {
+            team: budget.saved_kg
+            for team, budget in market.budgets.items()
+        }
+
+        prompt = self.BROKER_PROMPT.format(
+            budget_status_json=_json.dumps(budget_status.get("budgets", {}), indent=2),
+            surplus_teams=surplus_teams,
+            deficit_teams=deficit_teams,
+            savings_by_team=savings_by_team,
+        )
+
+        raw = self.llm.complete(prompt)
+
+        # Try to parse LLM response as JSON
+        try:
+            import re
+            match = re.search(r'\{.*\}', raw, re.DOTALL)
+            if match:
+                return _json.loads(match.group())
+        except Exception:
+            pass
+
+        # Fallback: return empty structure
+        self.memory.add_reasoning("broker_fallback",
+            "LLM broker response could not be parsed. Returning empty trades.")
+        return {
+            "proposed_trades": [],
+            "team_summaries": {},
+            "team_of_the_week": None,
+            "team_of_the_week_reason": "No trades proposed this week.",
         }
 
     def _calculate_points(self, verification: VerificationRecord, team_id: str) -> Optional[PointsEntry]:

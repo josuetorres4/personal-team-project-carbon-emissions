@@ -204,6 +204,54 @@ class Orchestrator:
             with open("data/sample_evidence_chain.txt", "w") as f:
                 f.write(format_evidence_chain(verifications[0]))
 
+        # --- FEEDBACK LOOP ---
+        MAX_REPLAN_CYCLES = 2
+        replan_count = 0
+
+        def should_replan(vlist, threshold=0.5):
+            if not vlist:
+                return False
+            significant = sum(1 for v in vlist if v.ci_lower > 0 and v.verified_savings_kgco2e > 0)
+            ratio = significant / len(vlist)
+            self._log(f"Verification significance ratio: {ratio:.1%} (threshold: {threshold:.1%})")
+            return ratio < threshold
+
+        while should_replan(verifications) and replan_count < MAX_REPLAN_CYCLES:
+            replan_count += 1
+            self._log(f"Replan cycle {replan_count}: less than 50% of savings are significant.")
+            # Re-run planning with tighter constraints
+            planner_result = self.planner.run({
+                "jobs": jobs,
+                "intensity_df": intensity_df,
+                "time_resolution_hours": time_resolution_hours,
+                "verbose": self.verbose,
+            })
+            recommendations = planner_result["recommendations"]
+            gov_result = self.governance.run({
+                "recommendations": recommendations,
+                "seed": seed,
+            })
+            approved_recs = gov_result["approved"]
+            gov_decisions = gov_result["decisions"]
+            exec_result = self.executor.run({
+                "approved_recs": approved_recs,
+                "jobs": jobs,
+            })
+            optimized_jobs = exec_result["optimized_jobs"]
+            unchanged_jobs = exec_result["unchanged_jobs"]
+            exec_records = exec_result["execution_records"]
+            all_final_jobs = optimized_jobs + unchanged_jobs
+            post_emissions = compute_emissions_batch(all_final_jobs, intensity_df, verbose=self.verbose)
+            post_emissions_df = emissions_to_dataframe(post_emissions)
+            total_post_kgco2e = post_emissions_df["kgco2e"].sum()
+            actual_reduction = total_baseline_kgco2e - total_post_kgco2e
+            original_jobs_for_verify = [j for j in jobs if j.job_id in {r.job_id for r in approved_recs}]
+            verifications = verify_batch(
+                approved_recs, original_jobs_for_verify, optimized_jobs,
+                intensity_df, verbose=self.verbose,
+            )
+            verify_summary = summarize_verification(verifications)
+
         # ── LEARN: Copilot Agent (LLM + deterministic) ────────────────
         self._section("Step 6: LEARN — Developer Copilot Agent")
 
@@ -329,6 +377,10 @@ class Orchestrator:
                 "verifications_completed": len(verifications),
                 "verification_summary": verify_summary,
                 "negotiation_dialogues": len(self.dialogues),
+                "replan_cycles": replan_count,
+                "final_significance_ratio": (
+                    sum(1 for v in verifications if v.ci_lower > 0 and v.verified_savings_kgco2e > 0) / max(len(verifications), 1)
+                ),
             },
             "gamification": {
                 "total_points_awarded": total_points,

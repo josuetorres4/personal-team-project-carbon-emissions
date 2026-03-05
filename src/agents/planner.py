@@ -63,6 +63,41 @@ class PlannerAgent(BaseAgent):
     Deterministic role: Score candidates, enforce constraints, compute deltas.
     """
 
+    PLANNER_PROMPT = """
+You are a carbon futures trader optimizing cloud workload scheduling.
+
+You have a 72-hour carbon intensity forecast:
+{forecast_json}
+
+Current unscheduled flexible jobs:
+{jobs_json}
+
+Your job is to find the OPTIMAL window for each flexible job — not just
+the cheapest current slot, but the best slot in the next 72 hours
+given forecast uncertainty.
+
+For each job, reason like a trader:
+1. What is the current carbon cost if we run now?
+2. What is the forecasted minimum carbon window in 72 hours?
+3. What is the risk of waiting? (SLA, cost of delay, forecast uncertainty)
+4. Is the saving worth the wait?
+
+Return ONLY a JSON array:
+[{{
+  "job_id": "...",
+  "action": "shift_time|shift_region|run_now",
+  "target_window_utc": "ISO timestamp or null",
+  "target_region": "region or null",
+  "estimated_carbon_saving_kg": 0.0,
+  "estimated_cost_delta_usd": 0.0,
+  "confidence": "HIGH|MEDIUM|LOW",
+  "trader_rationale": "one sentence: why this window beats running now"
+}}]
+
+Only recommend shifts with HIGH or MEDIUM confidence.
+Do NOT recommend shifts that save less than 5% carbon.
+"""
+
     def __init__(self, llm: Optional[LLMProvider] = None):
         super().__init__(
             name="Planner Agent",
