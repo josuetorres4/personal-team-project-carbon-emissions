@@ -174,6 +174,7 @@ if page == "🌍 Your Impact This Week":
                 with zipfile.ZipFile(buf, "w") as z:
                     for pdf in evidence_dir.glob("*.pdf"):
                         z.write(pdf, pdf.name)
+                buf.seek(0)
                 st.download_button("Download ZIP", buf.getvalue(), "evidence_cards.zip")
     else:
         st.info("No proof-of-impact data available yet. Run `python run_pipeline.py` first.")
