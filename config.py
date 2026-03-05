@@ -27,6 +27,8 @@ class Config:
     LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
     LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.3"))
     LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "1024"))
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+    GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
     # Multi-agent negotiation
     MAX_NEGOTIATION_ROUNDS = int(os.getenv("MAX_NEGOTIATION_ROUNDS", "4"))

@@ -14,7 +14,8 @@ The Orchestrator manages 5 AI agents + 2 deterministic services:
 
 Usage:
   python run_pipeline.py              # Mock LLM (no API key needed)
-  OPENAI_API_KEY=sk-... python run_pipeline.py   # Real LLM
+  GROQ_API_KEY=gsk_... python run_pipeline.py   # Groq LLM (free)
+  OPENAI_API_KEY=sk-... python run_pipeline.py   # OpenAI LLM
 """
 
 import json
@@ -28,7 +29,7 @@ from src.shared.proof_of_impact import ProofOfImpactCard
 
 def main():
     orchestrator = Orchestrator(
-        llm_provider="auto",  # Uses OpenAI if OPENAI_API_KEY is set, else mock
+        llm_provider="auto",  # Uses Groq/OpenAI if API key is set, else mock
         verbose=True,
     )
 
