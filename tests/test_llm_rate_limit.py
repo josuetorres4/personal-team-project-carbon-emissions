@@ -73,8 +73,8 @@ class TestLLMRetryLogic:
         assert result == "success"
         assert mock_client.chat.completions.create.call_count == 2
 
-    def test_retry_exhausted_raises(self):
-        """After max retries, the exception is re-raised."""
+    def test_retry_exhausted_waits_and_retries_once_more(self):
+        """After max retries, waits 5 min then tries once more before fallback."""
         provider = LLMProvider("mock")
         provider.provider = "openai"
 
@@ -83,11 +83,39 @@ class TestLLMRetryLogic:
         mock_client.chat.completions.create.side_effect = rate_limit_error
         provider._client = mock_client
 
-        with patch("src.agents.base.time.sleep"):
-            with pytest.raises(Exception, match="429"):
-                provider._chat_openai("system", "user", 0.3)
+        with patch("src.agents.base.time.sleep") as mock_sleep:
+            result = provider._chat_openai("system", "user", 0.3)
 
-        assert mock_client.chat.completions.create.call_count == 5  # max_retries
+        assert result == LLMProvider.RATE_LIMIT_RESPONSE
+        # 5 initial retries + 1 final attempt after long wait = 6 total calls
+        assert mock_client.chat.completions.create.call_count == 6
+        # The last sleep call should be the 5-minute (300s) wait
+        sleep_calls = [call.args[0] for call in mock_sleep.call_args_list]
+        assert sleep_calls[-1] == 300
+
+    def test_retry_exhausted_final_attempt_succeeds(self):
+        """If the final attempt after the long wait succeeds, return it."""
+        provider = LLMProvider("mock")
+        provider.provider = "openai"
+
+        mock_client = MagicMock()
+        rate_limit_error = Exception("429 Too Many Requests")
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock(message=MagicMock(content="final success"))]
+        mock_response.usage = MagicMock(total_tokens=50)
+        # Fail 5 times, then succeed on final attempt
+        mock_client.chat.completions.create.side_effect = [
+            rate_limit_error, rate_limit_error, rate_limit_error,
+            rate_limit_error, rate_limit_error,
+            mock_response,
+        ]
+        provider._client = mock_client
+
+        with patch("src.agents.base.time.sleep"):
+            result = provider._chat_openai("system", "user", 0.3)
+
+        assert result == "final success"
+        assert mock_client.chat.completions.create.call_count == 6
 
     def test_non_rate_limit_error_not_retried(self):
         """Non-rate-limit errors are raised immediately."""

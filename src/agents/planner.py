@@ -232,6 +232,8 @@ Do NOT recommend shifts that save less than 5% carbon.
             print(f"  Generating LLM rationales for top {llm_limit} recommendations "
                   f"({len(template_recs)} will use deterministic rationale)...")
 
+        _FALLBACK_RESPONSES = (LLMProvider.RATE_LIMIT_RESPONSE, LLMProvider.BUDGET_EXCEEDED_RESPONSE)
+
         # LLM rationales for top recommendations
         for i, rec in enumerate(llm_recs):
             context = (
@@ -243,7 +245,19 @@ Do NOT recommend shifts that save less than 5% carbon.
                 f"risk_level: {rec.risk_level}\n"
                 f"confidence: {rec.confidence:.0%}\n"
             )
-            rec.rationale = self.reason(system_prompt, context)
+            try:
+                rationale = self.reason(system_prompt, context)
+            except Exception as e:
+                print(f"  [Planner] LLM call failed for {rec.job_id}: {e}. Using deterministic rationale.")
+                rationale = None
+
+            if rationale is None or rationale in _FALLBACK_RESPONSES:
+                rationale = (
+                    f"Shifting {rec.action_type.replace('_', ' ')} from {rec.current_region} "
+                    f"to {rec.proposed_region} saves {abs(rec.est_carbon_delta_kg * 1000):.1f} gCO₂e "
+                    f"(cost delta: ${rec.est_cost_delta_usd:+.4f}, confidence: {rec.confidence:.0%})."
+                )
+            rec.rationale = rationale
 
             if verbose and (i + 1) % 10 == 0:
                 print(f"  LLM rationales: {i + 1} / {llm_limit} complete...")

@@ -11,6 +11,7 @@ from datetime import datetime
 
 from src.shared.models import Recommendation
 from src.agents.planner import PlannerAgent, MAX_LLM_RATIONALES
+from src.agents.base import LLMProvider
 
 
 def _make_rec(carbon_delta: float, job_id: str = "j1") -> Recommendation:
@@ -139,3 +140,43 @@ class TestMaxLLMRationalesConfig:
         from config import Config
         assert hasattr(Config, "MAX_LLM_RATIONALES")
         assert Config.MAX_LLM_RATIONALES == 10
+
+
+class TestRateLimitFallback:
+    """Test that planner falls back to deterministic rationale on LLM failure."""
+
+    def test_rate_limit_response_falls_back_to_deterministic(self):
+        """When LLM returns rate-limit fallback, planner uses deterministic rationale."""
+        agent = PlannerAgent()
+        agent.llm = MagicMock()
+        agent.llm.chat.return_value = LLMProvider.RATE_LIMIT_RESPONSE
+
+        recs = [_make_rec(-0.01, f"j{i}") for i in range(3)]
+        agent._enrich_with_llm_rationales(recs)
+
+        for rec in recs:
+            assert rec.rationale.startswith("Shifting"), (
+                "Rate-limit fallback should produce a deterministic rationale"
+            )
+
+    def test_budget_exceeded_falls_back_to_deterministic(self):
+        """When LLM returns budget-exceeded fallback, planner uses deterministic rationale."""
+        agent = PlannerAgent()
+        agent.llm = MagicMock()
+        agent.llm.chat.return_value = LLMProvider.BUDGET_EXCEEDED_RESPONSE
+
+        recs = [_make_rec(-0.01, "j1")]
+        agent._enrich_with_llm_rationales(recs)
+
+        assert recs[0].rationale.startswith("Shifting")
+
+    def test_llm_exception_falls_back_to_deterministic(self):
+        """When LLM raises an unexpected exception, planner uses deterministic rationale."""
+        agent = PlannerAgent()
+        agent.llm = MagicMock()
+        agent.llm.chat.side_effect = Exception("Unexpected API error")
+
+        recs = [_make_rec(-0.01, "j1")]
+        agent._enrich_with_llm_rationales(recs)
+
+        assert recs[0].rationale.startswith("Shifting")
