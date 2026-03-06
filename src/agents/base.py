@@ -41,17 +41,34 @@ class LLMProvider:
     """
     Wrapper for LLM calls. Supports OpenAI API, Groq API (OpenAI-compatible),
     or falls back to a local mock for development/testing without API keys.
+
+    Tracks total token usage across all calls and enforces a configurable
+    budget (MAX_TOTAL_LLM_TOKENS, default 100,000) to avoid hitting
+    provider-side rate limits such as Groq's tokens-per-day cap.
     """
 
-    def __init__(self, provider: str = "auto"):
+    # Fallback returned when the token budget is exhausted
+    BUDGET_EXCEEDED_RESPONSE = (
+        "[Token budget exceeded — falling back to deterministic processing]"
+    )
+
+    def __init__(self, provider: str = "auto", max_total_tokens: Optional[int] = None):
         """
         Args:
             provider: "openai", "groq", "mock", or "auto"
                       (auto tries groq first, then openai, then mock)
+            max_total_tokens: Optional token budget override.
+                              Defaults to Config.MAX_TOTAL_LLM_TOKENS (100,000).
         """
+        from config import Config
         self.provider = provider
         self._client = None
         self._model = os.environ.get("LLM_MODEL", "gpt-4o-mini")
+        self.total_tokens_used = 0
+        self.max_total_tokens = (
+            max_total_tokens if max_total_tokens is not None
+            else Config.MAX_TOTAL_LLM_TOKENS
+        )
         if provider == "auto":
             if os.environ.get("GROQ_API_KEY"):
                 self.provider = "groq"
@@ -80,8 +97,46 @@ class LLMProvider:
                 print("  [LLM] OpenAI not available, falling back to mock")
                 self.provider = "mock"
 
+    @staticmethod
+    def estimate_tokens(text: str) -> int:
+        """Rough token estimate: ~1 token per 4 characters for English text."""
+        return max(1, len(text) // 4)
+
+    @property
+    def token_budget_remaining(self) -> int:
+        """Tokens still available under the budget."""
+        return max(0, self.max_total_tokens - self.total_tokens_used)
+
+    @property
+    def token_budget_exceeded(self) -> bool:
+        """True when the total token budget has been exhausted."""
+        return self.total_tokens_used >= self.max_total_tokens
+
     def chat(self, system_prompt: str, user_message: str, temperature: float = 0.3) -> str:
-        """Send a chat completion request."""
+        """Send a chat completion request.
+
+        If the estimated token cost of this call would push usage over
+        ``max_total_tokens``, the API call is skipped and a deterministic
+        fallback string is returned instead.
+        """
+        estimated_input = (
+            self.estimate_tokens(system_prompt)
+            + self.estimate_tokens(user_message)
+        )
+        # Reserve headroom for the completion (max_tokens from config)
+        from config import Config
+        estimated_total = estimated_input + Config.LLM_MAX_TOKENS
+
+        if self.total_tokens_used + estimated_total > self.max_total_tokens:
+            remaining = self.token_budget_remaining
+            print(
+                f"  [LLM] Token budget would be exceeded "
+                f"({self.total_tokens_used} used + ~{estimated_total} estimated "
+                f"> {self.max_total_tokens} limit, {remaining} remaining). "
+                f"Falling back to deterministic response."
+            )
+            return self.BUDGET_EXCEEDED_RESPONSE
+
         if self.provider in ("openai", "groq"):
             return self._chat_openai(system_prompt, user_message, temperature)
         else:
@@ -92,6 +147,7 @@ class LLMProvider:
         return self.chat("You are a helpful assistant.", prompt, temperature)
 
     def _chat_openai(self, system_prompt: str, user_message: str, temperature: float) -> str:
+        from config import Config
         max_retries = 5
         base_delay = 2.0
         for attempt in range(max_retries):
@@ -103,8 +159,18 @@ class LLMProvider:
                         {"role": "user", "content": user_message},
                     ],
                     temperature=temperature,
-                    max_tokens=1024,
+                    max_tokens=Config.LLM_MAX_TOKENS,
                 )
+                # Track actual token usage from the API response
+                if response.usage is not None:
+                    self.total_tokens_used += response.usage.total_tokens
+                else:
+                    # Fallback: estimate when usage data is unavailable
+                    self.total_tokens_used += (
+                        self.estimate_tokens(system_prompt)
+                        + self.estimate_tokens(user_message)
+                        + self.estimate_tokens(response.choices[0].message.content or "")
+                    )
                 return response.choices[0].message.content
             except Exception as e:
                 error_str = str(e).lower()
@@ -132,23 +198,31 @@ class LLMProvider:
         prompt_lower = system_prompt.lower()
 
         if any(w in prompt_lower for w in _DIALOGUE_KEYWORDS):
-            return self._mock_dialogue_response(system_prompt, user_message)
+            response = self._mock_dialogue_response(system_prompt, user_message)
         elif "carbon optimization assistant" in prompt_lower:
-            return self._mock_chat_assistant(user_message)
+            response = self._mock_chat_assistant(user_message)
         elif "explain" in prompt_lower or "rationale" in prompt_lower:
-            return self._mock_explanation(user_message)
+            response = self._mock_explanation(user_message)
         elif "ticket" in prompt_lower or "jira" in prompt_lower or "pr " in prompt_lower:
-            return self._mock_ticket(user_message)
+            response = self._mock_ticket(user_message)
         elif "summarize" in prompt_lower or "summary" in prompt_lower:
-            return self._mock_summary(user_message)
+            response = self._mock_summary(user_message)
         elif "policy" in prompt_lower or "parse" in prompt_lower:
-            return self._mock_policy_parse(user_message)
+            response = self._mock_policy_parse(user_message)
         elif "nudge" in prompt_lower or "copilot" in prompt_lower:
-            return self._mock_nudge(user_message)
+            response = self._mock_nudge(user_message)
         elif "risk" in prompt_lower or "assess" in prompt_lower:
-            return self._mock_risk_assessment(user_message)
+            response = self._mock_risk_assessment(user_message)
         else:
-            return f"[Mock LLM] Processed request with {len(user_message)} chars of context."
+            response = f"[Mock LLM] Processed request with {len(user_message)} chars of context."
+
+        # Track estimated token usage for mock calls
+        self.total_tokens_used += (
+            self.estimate_tokens(system_prompt)
+            + self.estimate_tokens(user_message)
+            + self.estimate_tokens(response)
+        )
+        return response
 
     def _mock_dialogue_response(self, system_prompt: str, user_message: str) -> str:
         """Generate a contextual multi-agent dialogue response in mock mode."""

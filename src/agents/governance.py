@@ -42,7 +42,7 @@ except Exception:
     _MAX_RECOMMENDATIONS_PER_BATCH = 6000
     _MAX_BATCH_COST_INCREASE = 500.0
     _MAX_JOBS_PER_REGION = 15
-    _MAX_LLM_RISK_ASSESSMENTS = 50
+    _MAX_LLM_RISK_ASSESSMENTS = 10
 
 
 # ── Governance configuration ──────────────────────────────────────────

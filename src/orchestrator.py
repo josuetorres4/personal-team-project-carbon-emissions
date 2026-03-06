@@ -427,7 +427,7 @@ class Orchestrator:
             from config import Config
             max_rounds = Config.MAX_NEGOTIATION_ROUNDS
         except Exception:
-            max_rounds = 4
+            max_rounds = 2
 
         dialogue = Dialogue(
             topic="Batch Optimization Strategy",

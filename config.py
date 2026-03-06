@@ -26,12 +26,13 @@ class Config:
     LLM_PROVIDER = os.getenv("LLM_PROVIDER", "auto")
     LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
     LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.3"))
-    LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "1024"))
+    LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "512"))
+    MAX_TOTAL_LLM_TOKENS = int(os.getenv("MAX_TOTAL_LLM_TOKENS", "100000"))
     GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
     GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
     # Multi-agent negotiation
-    MAX_NEGOTIATION_ROUNDS = int(os.getenv("MAX_NEGOTIATION_ROUNDS", "4"))
+    MAX_NEGOTIATION_ROUNDS = int(os.getenv("MAX_NEGOTIATION_ROUNDS", "2"))
 
     # Carbon pricing (USD per ton CO₂e)
     CARBON_PRICE_PER_TON = float(os.getenv("CARBON_PRICE_PER_TON", "75"))
@@ -39,9 +40,9 @@ class Config:
     # Planner constraints
     MIN_CARBON_REDUCTION_PCT = float(os.getenv("MIN_CARBON_REDUCTION_PCT", "10.0"))
     MAX_COST_INCREASE_PCT = float(os.getenv("MAX_COST_INCREASE_PCT", "20.0"))
-    MAX_LLM_RATIONALES = int(os.getenv("MAX_LLM_RATIONALES", "50"))
-    MAX_LLM_TICKETS = int(os.getenv("MAX_LLM_TICKETS", "50"))
-    MAX_LLM_RISK_ASSESSMENTS = int(os.getenv("MAX_LLM_RISK_ASSESSMENTS", "50"))
+    MAX_LLM_RATIONALES = int(os.getenv("MAX_LLM_RATIONALES", "10"))
+    MAX_LLM_TICKETS = int(os.getenv("MAX_LLM_TICKETS", "10"))
+    MAX_LLM_RISK_ASSESSMENTS = int(os.getenv("MAX_LLM_RISK_ASSESSMENTS", "10"))
 
     # Governance circuit breakers
     MAX_RECOMMENDATIONS_PER_BATCH = int(os.getenv("MAX_RECS_PER_BATCH", "6000"))
