@@ -1,1 +1,54 @@
 Sarthak Interviews
+
+# Interview Insights
+
+---
+
+# INTERVIEW 1 — Vinit Agraharkar
+**Role:** Data Engineer, Skulicity  
+**Duration:** 12 minutes  
+
+Vinit works as a data engineer at Skulicity, where his team regularly runs large-scale cloud workloads and performs time-series analyses on terabytes of data. His day-to-day work involves managing and optimizing large compute jobs in the cloud.
+
+When discussing sustainability within his organization, Vinit mentioned that **carbon emissions or net-zero goals are not currently a major topic of discussion among developers**. Most engineering decisions are still driven by performance and cost rather than environmental impact. However, he believes this will likely change as organizations begin to treat carbon as a measurable cost or regulatory requirement.
+
+Vinit personally expressed interest in becoming a **more environmentally responsible developer**. However, he pointed out that developers currently lack tools that connect their workloads directly to carbon impact. There is little visibility into how running large-scale compute jobs affects emissions.
+
+He explained that the **biggest technical barrier is retrieving and orchestrating the relevant emissions data**. Cloud workloads span multiple services, regions, and infrastructure layers, which makes it difficult to gather accurate carbon impact information.
+
+Vinit suggested that a system capable of **retrieving emissions data from multiple sources and reasoning over it automatically** would be highly valuable. He specifically mentioned that the retrieval and reasoning capabilities of a **multi-agent AI system** could help developers understand the environmental impact of their workloads and make better decisions.
+
+### Tool Failures Identified
+- Lack of tools connecting cloud workloads directly to carbon impact
+- Difficulty retrieving emissions data across complex cloud systems
+- No developer-focused recommendations for sustainable computing
+
+### Opportunity for Our Tool
+Create a system that integrates with cloud workloads and uses AI agents to retrieve emissions data and recommend **more sustainable execution strategies for large-scale compute jobs**.
+
+---
+
+# INTERVIEW 2 — Yash Sangle
+**Role:** IT Risk & Management, Deloitte  
+**Duration:** 10 minutes  
+
+Yash works in IT risk and management at Deloitte, where his work focuses on governance, auditing processes, and compliance oversight. His responsibilities involve ensuring transparency, traceability, and accountability in technical systems.
+
+When discussing carbon accounting tools, Yash explained that many existing systems feel **too technical and difficult to understand for non-engineering stakeholders**. Sustainability tools often require users to interpret complex dashboards or technical metrics, which can make them difficult for risk and compliance professionals to engage with.
+
+He expressed that interacting with such a system through **natural language would make the experience significantly easier**. Instead of navigating technical interfaces, he would prefer to ask simple questions such as:
+
+> "What is our carbon footprint?"  
+> "What changes would reduce our emissions the most?"
+
+Another important concern he raised was the importance of **auditability and transparency**. In risk and compliance environments, it is critical to understand how numbers are calculated and what data sources were used to generate them.
+
+During the conversation, the topic of carbon credits also came up. Yash mentioned that although the current cost of carbon credits may not seem very high, the rapid growth of AI workloads could make carbon a **much more valuable resource in the future**. If organizations can track and manage carbon credits effectively, he believes they could eventually become **tradeable assets**, similar to financial instruments or commodities.
+
+### Tool Failures Identified
+- Carbon tools are difficult for non-technical stakeholders to interpret
+- Lack of natural-language interaction with emissions data
+- Limited transparency into emissions calculations
+
+### Opportunity for Our Tool
+Develop a natural-language AI interface that allows users to **query emissions data, understand calculations, and access audit trails without needing technical expertise**.
