@@ -129,3 +129,29 @@ These findings influenced the design of our system by motivating:
 - safeguards to prevent recursive agent loops
 - modular architecture for easier debugging and scaling.
 
+
+## Copilot Debugging Workflow
+
+In addition to using Copilot for system scaffolding, we also used it actively during development to debug issues that appeared when implementing the multi-agent simulation pipeline. The task associated with this debugging process can be found here:
+
+https://github.com/IS492-SP26/team-project-carbon-emissions/tasks/f2849ec3-3c36-408a-8642-238db356e09b
+
+### Scenario
+
+While running the prototype system, we encountered issues in the agent orchestration layer. In particular, the planner and governance agents sometimes entered repeated reasoning cycles during the 30-day simulation. This caused the system to:
+
+- repeatedly evaluate the same workloads
+- generate duplicate scheduling decisions
+- eventually hit API rate limits and token limits.
+
+To resolve this, we used Copilot directly inside the development environment to inspect the orchestration logic and identify the cause of the loop.
+
+---
+
+### Prompt Used with Copilot
+The planner and governance agents in my multi-agent simulation sometimes enter a loop where the same workload is repeatedly evaluated.
+The pipeline runs for a 30-day simulation and eventually hits token limits.
+
+Help me debug why this might be happening and suggest safeguards to prevent infinite reasoning loops.
+
+
