@@ -39,7 +39,7 @@ except Exception:
     _CARBON_PRICE_PER_TON = 75.0
     _MIN_CARBON_REDUCTION_PCT = 10.0
     _MAX_COST_INCREASE_PCT = 20.0
-    _MAX_LLM_RATIONALES = 50
+    _MAX_LLM_RATIONALES = 10
 
 
 # ── Planner configuration ────────────────────────────────────────────

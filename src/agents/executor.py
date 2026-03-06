@@ -35,7 +35,7 @@ try:
     from config import Config as _Config
     _MAX_LLM_TICKETS = _Config.MAX_LLM_TICKETS
 except Exception:
-    _MAX_LLM_TICKETS = 50
+    _MAX_LLM_TICKETS = 10
 
 MAX_LLM_TICKETS = _MAX_LLM_TICKETS
 

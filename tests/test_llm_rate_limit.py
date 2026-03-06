@@ -109,12 +109,12 @@ class TestExecutorLLMCap:
     """Test that the Executor caps LLM ticket generation calls."""
 
     def test_default_cap_value(self):
-        assert MAX_LLM_TICKETS == 50
+        assert MAX_LLM_TICKETS == 10
 
     def test_config_exists(self):
         from config import Config
         assert hasattr(Config, "MAX_LLM_TICKETS")
-        assert Config.MAX_LLM_TICKETS == 50
+        assert Config.MAX_LLM_TICKETS == 10
 
     def test_small_batch_all_get_llm_tickets(self):
         """When approved recs < MAX_LLM_TICKETS, all get LLM tickets."""
@@ -171,12 +171,12 @@ class TestGovernanceLLMCap:
     """Test that the Governance agent caps LLM risk assessment calls."""
 
     def test_default_cap_value(self):
-        assert MAX_LLM_RISK_ASSESSMENTS == 50
+        assert MAX_LLM_RISK_ASSESSMENTS == 10
 
     def test_config_exists(self):
         from config import Config
         assert hasattr(Config, "MAX_LLM_RISK_ASSESSMENTS")
-        assert Config.MAX_LLM_RISK_ASSESSMENTS == 50
+        assert Config.MAX_LLM_RISK_ASSESSMENTS == 10
 
     def test_low_risk_no_llm_calls(self):
         """Low-risk recommendations don't use LLM risk assessment."""

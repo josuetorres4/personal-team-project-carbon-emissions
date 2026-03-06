@@ -29,7 +29,7 @@ class TestConfigDefaults:
     def test_max_negotiation_rounds_default(self):
         from config import Config
         # Default is 4 unless env overrides
-        expected = int(os.getenv("MAX_NEGOTIATION_ROUNDS", "4"))
+        expected = int(os.getenv("MAX_NEGOTIATION_ROUNDS", "2"))
         assert Config.MAX_NEGOTIATION_ROUNDS == expected
 
     def test_carbon_price_default(self):

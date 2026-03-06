@@ -147,6 +147,7 @@ class LLMProvider:
         return self.chat("You are a helpful assistant.", prompt, temperature)
 
     def _chat_openai(self, system_prompt: str, user_message: str, temperature: float) -> str:
+        from config import Config
         max_retries = 5
         base_delay = 2.0
         for attempt in range(max_retries):
@@ -158,7 +159,7 @@ class LLMProvider:
                         {"role": "user", "content": user_message},
                     ],
                     temperature=temperature,
-                    max_tokens=1024,
+                    max_tokens=Config.LLM_MAX_TOKENS,
                 )
                 # Track actual token usage from the API response
                 if response.usage is not None:

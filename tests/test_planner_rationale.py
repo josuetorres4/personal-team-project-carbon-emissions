@@ -133,9 +133,9 @@ class TestMaxLLMRationalesConfig:
     """Test the MAX_LLM_RATIONALES configuration."""
 
     def test_default_value(self):
-        assert MAX_LLM_RATIONALES == 50
+        assert MAX_LLM_RATIONALES == 10
 
     def test_config_exists(self):
         from config import Config
         assert hasattr(Config, "MAX_LLM_RATIONALES")
-        assert Config.MAX_LLM_RATIONALES == 50
+        assert Config.MAX_LLM_RATIONALES == 10
