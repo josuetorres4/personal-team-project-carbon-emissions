@@ -192,9 +192,34 @@ class LLMProvider:
                           f"(attempt {attempt + 1}/{max_retries})...")
                     time.sleep(delay)
                 elif is_rate_limit:
+                    # Final long wait before giving up
+                    wait = Config.RATE_LIMIT_WAIT_SECONDS
                     print(f"  [LLM] Rate limit retries exhausted after {max_retries} attempts. "
-                          f"Falling back to deterministic response.")
-                    return self.RATE_LIMIT_RESPONSE
+                          f"Waiting {wait}s before final attempt...")
+                    time.sleep(wait)
+                    try:
+                        response = self._client.chat.completions.create(
+                            model=self._model,
+                            messages=[
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": user_message},
+                            ],
+                            temperature=temperature,
+                            max_tokens=Config.LLM_MAX_TOKENS,
+                        )
+                        if response.usage is not None:
+                            self.total_tokens_used += response.usage.total_tokens
+                        else:
+                            self.total_tokens_used += (
+                                self.estimate_tokens(system_prompt)
+                                + self.estimate_tokens(user_message)
+                                + self.estimate_tokens(response.choices[0].message.content or "")
+                            )
+                        return response.choices[0].message.content
+                    except Exception:
+                        print(f"  [LLM] Final attempt after {wait}s wait also failed. "
+                              f"Falling back to deterministic response.")
+                        return self.RATE_LIMIT_RESPONSE
                 else:
                     raise
 
