@@ -73,8 +73,8 @@ class TestLLMRetryLogic:
         assert result == "success"
         assert mock_client.chat.completions.create.call_count == 2
 
-    def test_retry_exhausted_raises(self):
-        """After max retries, the exception is re-raised."""
+    def test_retry_exhausted_returns_fallback(self):
+        """After max retries, a fallback response is returned instead of raising."""
         provider = LLMProvider("mock")
         provider.provider = "openai"
 
@@ -84,9 +84,9 @@ class TestLLMRetryLogic:
         provider._client = mock_client
 
         with patch("src.agents.base.time.sleep"):
-            with pytest.raises(Exception, match="429"):
-                provider._chat_openai("system", "user", 0.3)
+            result = provider._chat_openai("system", "user", 0.3)
 
+        assert result == LLMProvider.RATE_LIMIT_RESPONSE
         assert mock_client.chat.completions.create.call_count == 5  # max_retries
 
     def test_non_rate_limit_error_not_retried(self):

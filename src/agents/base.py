@@ -52,6 +52,11 @@ class LLMProvider:
         "[Token budget exceeded — falling back to deterministic processing]"
     )
 
+    # Fallback returned when rate-limit retries are exhausted
+    RATE_LIMIT_RESPONSE = (
+        "[Rate limit exceeded — falling back to deterministic processing]"
+    )
+
     def __init__(self, provider: str = "auto", max_total_tokens: Optional[int] = None):
         """
         Args:
@@ -186,6 +191,10 @@ class LLMProvider:
                     print(f"  [LLM] Rate limit hit, retrying in {delay:.0f}s "
                           f"(attempt {attempt + 1}/{max_retries})...")
                     time.sleep(delay)
+                elif is_rate_limit:
+                    print(f"  [LLM] Rate limit retries exhausted after {max_retries} attempts. "
+                          f"Falling back to deterministic response.")
+                    return self.RATE_LIMIT_RESPONSE
                 else:
                     raise
 
