@@ -245,11 +245,15 @@ Do NOT recommend shifts that save less than 5% carbon.
             )
             try:
                 rationale = self.reason(system_prompt, context)
-            except Exception:
+            except (OSError, ConnectionError, TimeoutError, RuntimeError, ValueError) as e:
+                print(f"  [Planner] LLM call failed for {rec.job_id}: {e}. Using deterministic rationale.")
+                rationale = None
+            except Exception as e:
+                print(f"  [Planner] Unexpected error for {rec.job_id}: {e}. Using deterministic rationale.")
                 rationale = None
 
-            # Fall back to deterministic rationale if LLM failed or returned a fallback marker
-            if rationale is None or rationale.startswith("["):
+            _FALLBACK_RESPONSES = (LLMProvider.RATE_LIMIT_RESPONSE, LLMProvider.BUDGET_EXCEEDED_RESPONSE)
+            if rationale is None or rationale in _FALLBACK_RESPONSES:
                 rationale = (
                     f"Shifting {rec.action_type.replace('_', ' ')} from {rec.current_region} "
                     f"to {rec.proposed_region} saves {abs(rec.est_carbon_delta_kg * 1000):.1f} gCO₂e "
