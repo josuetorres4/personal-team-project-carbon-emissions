@@ -63,6 +63,27 @@ For example, we asked ChatGPT to evaluate a simple scheduling scenario:
 
 ### Observations
 
+Choose Region B.
+
+Here’s the carbon impact for the same 200 kWh training job in each region:
+
+Region A: 450 gCO2/kWh × 200 kWh = 90,000 gCO2 = 90 kgCO2
+
+Region B: 180 gCO2/kWh × 200 kWh = 36,000 gCO2 = 36 kgCO2
+
+Region C: 320 gCO2/kWh × 200 kWh = 64,000 gCO2 = 64 kgCO2
+
+Why Region B?
+Because it has the lowest carbon intensity, so the same workload produces the least emissions there.
+
+Compared with the others, choosing Region B would avoid:
+
+54 kgCO2 versus Region A
+
+28 kgCO2 versus Region C
+
+So if performance is similar across regions, the best choice is Region B, since it minimizes emissions without sacrificing workload quality.
+
 - Most tools correctly selected the region with the **lowest carbon intensity**.  
 - ChatGPT produced the **clearest explanations of the sustainability trade-offs**.  
 - However, emission factor sources were **rarely cited**, which reduces auditability.
@@ -90,6 +111,107 @@ The following scenario was provided to the models:
 > Which region should the company select if they want to balance cost and carbon emissions? Explain how the decision should be made.
 
 ### Observations
+First compute **both the cost and carbon impact** of running the 8-hour job in each region.
+
+Assume the workload consumes the same energy per hour in both regions (performance is similar), so only **carbon intensity and price** differ.
+
+---
+
+## 1. Cost Comparison
+
+**Region X**
+
+[
+8 \text{ hours} \times $0.90 = $7.20
+]
+
+**Region Y**
+
+[
+8 \text{ hours} \times $1.05 = $8.40
+]
+
+Cost difference:
+
+[
+$8.40 - $7.20 = $1.20
+]
+
+Region Y costs **$1.20 more**.
+
+---
+
+## 2. Carbon Comparison
+
+Carbon intensity difference:
+
+[
+210 - 180 = 30 \text{ gCO2/kWh}
+]
+
+Region Y is **~14% cleaner**:
+
+[
+\frac{30}{210} \approx 14.3%
+]
+
+If the workload consumes (E) kWh of electricity:
+
+* **Region X emissions:** (210 \times E)
+* **Region Y emissions:** (180 \times E)
+
+Savings from choosing Region Y:
+
+[
+30 \times E \text{ grams CO2}
+]
+
+---
+
+## 3. Decision Logic
+
+To **balance cost and carbon**, evaluate the **cost per unit of carbon reduction**.
+
+Extra cost paid for cleaner energy:
+
+[
+$1.20
+]
+
+Carbon reduction:
+
+[
+30E \text{ grams CO2}
+]
+
+Cost of carbon reduction:
+
+[
+\frac{1.20}{30E}
+]
+
+This tells the company **how much they are paying to reduce emissions**.
+
+---
+
+## 4. Practical Recommendation
+
+Because:
+
+* Region Y emits **~14% less carbon**
+* The cost increase is **small ($1.20 total)**
+
+A company prioritizing **sustainability with minimal financial impact** should choose **Region Y**.
+
+However:
+
+* If cost sensitivity is very high → choose **Region X**
+* If ESG or internal carbon pricing matters → choose **Region Y**
+
+---
+
+✅ **Balanced choice:** **Region Y**, because it meaningfully reduces emissions with only a small cost increase.
+
 
 - Models generally produced **reasonable recommendations**.  
 - However, the **decision logic was often not transparent**.  
