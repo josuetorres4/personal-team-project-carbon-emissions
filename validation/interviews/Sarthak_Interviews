@@ -1,5 +1,3 @@
-Sarthak Interviews
-
 # Interview Insights
 
 ---
@@ -8,20 +6,20 @@ Sarthak Interviews
 **Role:** Data Engineer, Skulicity  
 **Duration:** 12 minutes  
 
-Vinit works as a data engineer at Skulicity, where his team regularly runs large-scale cloud workloads and performs time-series analyses on terabytes of data. His day-to-day work involves managing and optimizing large compute jobs in the cloud.
+Vinit works as a data engineer at Skulicity, where his team runs large cloud workloads and performs time-series analyses on terabytes of data. Much of his work involves managing and optimizing compute jobs across cloud infrastructure.
 
-When discussing sustainability within his organization, Vinit mentioned that **carbon emissions or net-zero goals are not currently a major topic of discussion among developers**. Most engineering decisions are still driven by performance and cost rather than environmental impact. However, he believes this will likely change as organizations begin to treat carbon as a measurable cost or regulatory requirement.
+When asked about sustainability within his organization, Vinit mentioned that **carbon emissions and net-zero goals are not yet a major topic of discussion among developers**. Engineering teams typically optimize for performance, reliability, and cost rather than environmental impact. However, he believes that this will likely change in the near future as organizations begin to treat carbon as a measurable cost or regulatory requirement.
 
-Vinit personally expressed interest in becoming a **more environmentally responsible developer**. However, he pointed out that developers currently lack tools that connect their workloads directly to carbon impact. There is little visibility into how running large-scale compute jobs affects emissions.
+Vinit shared that he would personally like to become **a more sustainable developer**, but there are currently very few tools that help engineers understand the environmental impact of the workloads they run.
 
-He explained that the **biggest technical barrier is retrieving and orchestrating the relevant emissions data**. Cloud workloads span multiple services, regions, and infrastructure layers, which makes it difficult to gather accurate carbon impact information.
+He identified the **biggest challenge as the retrieval and orchestration of carbon-related data**. Cloud workloads often span multiple services, regions, and infrastructure layers, making it difficult to gather accurate emissions data for a given job.
 
-Vinit suggested that a system capable of **retrieving emissions data from multiple sources and reasoning over it automatically** would be highly valuable. He specifically mentioned that the retrieval and reasoning capabilities of a **multi-agent AI system** could help developers understand the environmental impact of their workloads and make better decisions.
+Vinit suggested that a system capable of **retrieving emissions data automatically and reasoning over it** would be extremely helpful. In particular, he felt that something with the **retrieval and reasoning capabilities of a multi-agent AI system** could significantly benefit organizations running complex cloud workloads.
 
 ### Tool Failures Identified
 - Lack of tools connecting cloud workloads directly to carbon impact
-- Difficulty retrieving emissions data across complex cloud systems
-- No developer-focused recommendations for sustainable computing
+- Difficulty retrieving emissions data across distributed cloud systems
+- No developer-focused tools providing sustainability recommendations
 
 ### Opportunity for Our Tool
 Create a system that integrates with cloud workloads and uses AI agents to retrieve emissions data and recommend **more sustainable execution strategies for large-scale compute jobs**.
@@ -32,23 +30,25 @@ Create a system that integrates with cloud workloads and uses AI agents to retri
 **Role:** IT Risk & Management, Deloitte  
 **Duration:** 10 minutes  
 
-Yash works in IT risk and management at Deloitte, where his work focuses on governance, auditing processes, and compliance oversight. His responsibilities involve ensuring transparency, traceability, and accountability in technical systems.
+Yash works in IT risk and management at Deloitte, where his responsibilities include governance, compliance, and auditing processes. His work focuses on ensuring transparency and accountability in technical systems.
 
-When discussing carbon accounting tools, Yash explained that many existing systems feel **too technical and difficult to understand for non-engineering stakeholders**. Sustainability tools often require users to interpret complex dashboards or technical metrics, which can make them difficult for risk and compliance professionals to engage with.
+When discussing carbon accounting tools, Yash mentioned that many existing solutions feel **too technical and difficult to understand for non-engineering stakeholders**. Sustainability platforms often require users to interpret complex dashboards or configure technical parameters, which can be a barrier for professionals working in risk and governance roles.
 
-He expressed that interacting with such a system through **natural language would make the experience significantly easier**. Instead of navigating technical interfaces, he would prefer to ask simple questions such as:
+He said it would be extremely helpful if the problem could be **explained in natural language**. Instead of navigating complicated tools, he would prefer to interact with an AI assistant that allows him to ask simple questions such as:
 
-> "What is our carbon footprint?"  
-> "What changes would reduce our emissions the most?"
+> "What is our carbon impact?"  
+> "What actions can reduce our emissions or costs?"
 
-Another important concern he raised was the importance of **auditability and transparency**. In risk and compliance environments, it is critical to understand how numbers are calculated and what data sources were used to generate them.
+Yash also emphasized the importance of **clear audit trails and transparency**. For professionals in risk and compliance roles, it is critical to understand how a calculation was performed and what data sources were used.
 
-During the conversation, the topic of carbon credits also came up. Yash mentioned that although the current cost of carbon credits may not seem very high, the rapid growth of AI workloads could make carbon a **much more valuable resource in the future**. If organizations can track and manage carbon credits effectively, he believes they could eventually become **tradeable assets**, similar to financial instruments or commodities.
+During the discussion, Yash raised an interesting idea about the **future value of carbon credits**. When informed that the current cost of purchasing carbon credits is relatively low, he suggested that this may change rapidly as AI workloads continue to grow.
+
+He proposed that if organizations can track and save carbon credits effectively, they could potentially become **a valuable digital asset — almost like Bitcoin**, where companies accumulate and trade credits as carbon becomes a more important economic resource.
 
 ### Tool Failures Identified
-- Carbon tools are difficult for non-technical stakeholders to interpret
+- Carbon tools are difficult for non-technical stakeholders to understand
 - Lack of natural-language interaction with emissions data
 - Limited transparency into emissions calculations
 
 ### Opportunity for Our Tool
-Develop a natural-language AI interface that allows users to **query emissions data, understand calculations, and access audit trails without needing technical expertise**.
+Develop a natural-language AI interface that allows users to **query emissions data, understand calculations, access audit trails, and manage carbon credits more transparently**.
