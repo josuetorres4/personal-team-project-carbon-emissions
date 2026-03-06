@@ -3,7 +3,7 @@ Tests for LLM token budget enforcement.
 
 Verifies that LLMProvider tracks token usage and falls back to a
 deterministic response when the configurable budget (MAX_TOTAL_LLM_TOKENS,
-default 100 000) would be exceeded — preventing Groq / OpenAI TPD errors.
+default 100,000) would be exceeded — preventing Groq / OpenAI TPD errors.
 """
 
 import pytest

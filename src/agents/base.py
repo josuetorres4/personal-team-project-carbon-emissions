@@ -43,7 +43,7 @@ class LLMProvider:
     or falls back to a local mock for development/testing without API keys.
 
     Tracks total token usage across all calls and enforces a configurable
-    budget (MAX_TOTAL_LLM_TOKENS, default 100 000) to avoid hitting
+    budget (MAX_TOTAL_LLM_TOKENS, default 100,000) to avoid hitting
     provider-side rate limits such as Groq's tokens-per-day cap.
     """
 
@@ -58,7 +58,7 @@ class LLMProvider:
             provider: "openai", "groq", "mock", or "auto"
                       (auto tries groq first, then openai, then mock)
             max_total_tokens: Optional token budget override.
-                              Defaults to Config.MAX_TOTAL_LLM_TOKENS (100 000).
+                              Defaults to Config.MAX_TOTAL_LLM_TOKENS (100,000).
         """
         from config import Config
         self.provider = provider
