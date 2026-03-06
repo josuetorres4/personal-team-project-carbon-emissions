@@ -334,4 +334,3 @@ The LLM handles:
 
 All *numbers* (emissions, costs, savings) are computed deterministically — the LLM only explains and communicates, never calculates.
 
-[View the Presentation](validation/sustainability_presentation.pdf)
