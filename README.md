@@ -6,6 +6,16 @@
 
 ## Why This Project?
 
+### Project Vision
+
+We envision an AI-powered sustainability advisor that connects cloud workload data,
+carbon emissions data, and intelligent reasoning to help organizations make
+more environmentally efficient infrastructure and development decisions.
+
+Instead of simply reporting emissions, the system would recommend
+more sustainable execution strategies and explain the environmental
+impact of those choices.
+
 ### The problem is real and growing
 
 Data centers now consume roughly **1% of global electricity** (~205 TWh/year) and that share is accelerating with AI workloads ([Masanet et al., *Science* 2020](https://www.science.org/doi/10.1126/science.aba3758)). Under the EU's Corporate Sustainability Reporting Directive (CSRD), ~50,000 companies are now **legally required** to disclose Scope 1/2/3 emissions — including cloud use. Carbon reporting has shifted from "nice to have" to "legally required."
