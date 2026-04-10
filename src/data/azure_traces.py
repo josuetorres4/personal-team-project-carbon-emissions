@@ -113,14 +113,23 @@ def load_azure_traces(
 
     print(f"  [Data] Loading Azure VM traces from {data_path}...")
 
-    # Read only the columns we need for memory efficiency
-    usecols = ["vmId", "subscriptionId", "deploymentId", "vmCategory",
-               "vmCreated", "vmDeleted", "maxCpu", "avgCpu", "core"]
+    # Dataset has no header row — columns are positional
+    # Order: vmId, subscriptionId, deploymentId, vmCreated, vmDeleted,
+    #        maxCpu, avgCpu, p95MaxCpu, vmCategory, core, vm_mem
+    COLUMN_NAMES = [
+        "vmId", "subscriptionId", "deploymentId",
+        "vmCreated", "vmDeleted",
+        "maxCpu", "avgCpu", "p95MaxCpu",
+        "vmCategory", "core", "vm_mem",
+    ]
+    USE_COLS = [0, 1, 2, 3, 4, 5, 6, 8, 9]  # positional indices we need
 
     try:
         df = pd.read_csv(
             data_path,
-            usecols=lambda c: c in usecols,
+            header=None,
+            names=COLUMN_NAMES,
+            usecols=USE_COLS,
             nrows=max_jobs * 3 if max_jobs else None,  # read extra to filter
         )
     except Exception as e:
