@@ -1,0 +1,104 @@
+{
+  "week": "2026-W14",
+  "budgets": {
+    "eu-frontend": {
+      "team": "eu-frontend",
+      "week": "2026-W14",
+      "allocated_kg": 500.0,
+      "spent_kg": 0.0,
+      "saved_kg": 0.0,
+      "traded_kg": 0.0,
+      "carbon_credits": 0.0
+    },
+    "eu-backend": {
+      "team": "eu-backend",
+      "week": "2026-W14",
+      "allocated_kg": 500.0,
+      "spent_kg": 0.0,
+      "saved_kg": 0.0,
+      "traded_kg": 0.0,
+      "carbon_credits": 0.0
+    },
+    "devops": {
+      "team": "devops",
+      "week": "2026-W14",
+      "allocated_kg": 500.0,
+      "spent_kg": 0.0,
+      "saved_kg": 0.0,
+      "traded_kg": 0.0,
+      "carbon_credits": 0.0
+    },
+    "backend-api": {
+      "team": "backend-api",
+      "week": "2026-W14",
+      "allocated_kg": 500.0,
+      "spent_kg": 0.0,
+      "saved_kg": 0.0,
+      "traded_kg": 0.0,
+      "carbon_credits": 0.0
+    },
+    "mobile": {
+      "team": "mobile",
+      "week": "2026-W14",
+      "allocated_kg": 500.0,
+      "spent_kg": 0.0,
+      "saved_kg": 0.0,
+      "traded_kg": 0.0,
+      "carbon_credits": 0.0
+    },
+    "frontend": {
+      "team": "frontend",
+      "week": "2026-W14",
+      "allocated_kg": 500.0,
+      "spent_kg": 0.0,
+      "saved_kg": 0.0,
+      "traded_kg": 0.0,
+      "carbon_credits": 0.0
+    },
+    "platform": {
+      "team": "platform",
+      "week": "2026-W14",
+      "allocated_kg": 500.0,
+      "spent_kg": 0.0,
+      "saved_kg": 0.0,
+      "traded_kg": 0.0,
+      "carbon_credits": 0.0
+    },
+    "ml-team": {
+      "team": "ml-team",
+      "week": "2026-W14",
+      "allocated_kg": 500.0,
+      "spent_kg": 0.0,
+      "saved_kg": 0.0,
+      "traded_kg": 0.0,
+      "carbon_credits": 0.0
+    },
+    "analytics": {
+      "team": "analytics",
+      "week": "2026-W14",
+      "allocated_kg": 500.0,
+      "spent_kg": 0.0,
+      "saved_kg": 0.0,
+      "traded_kg": 0.0,
+      "carbon_credits": 0.0
+    },
+    "data-eng": {
+      "team": "data-eng",
+      "week": "2026-W14",
+      "allocated_kg": 500.0,
+      "spent_kg": 0.0,
+      "saved_kg": 0.0,
+      "traded_kg": 0.0,
+      "carbon_credits": 0.0
+    }
+  },
+  "trades": [],
+  "market_summary": {
+    "total_teams": 10,
+    "teams_in_surplus": 10,
+    "teams_in_deficit": 0,
+    "total_trades_proposed": 0,
+    "total_trades_approved": 0,
+    "total_carbon_credits_usd": 0.0
+  }
+}

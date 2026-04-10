@@ -64,7 +64,12 @@ class Config:
     MAX_REPLAN_CYCLES = int(os.getenv("MAX_REPLAN_CYCLES", "2"))
     MIN_CARBON_SAVING_PCT = float(os.getenv("MIN_CARBON_SAVING_PCT", "5"))
 
-    # Real data
-    USE_REAL_CARBON_DATA = os.getenv("USE_REAL_CARBON_DATA", "true").lower() == "true"
+    # Real carbon intensity data
+    USE_REAL_CARBON_DATA = os.getenv("USE_REAL_CARBON_DATA", "false").lower() == "true"
     CARBON_DATA_CACHE_HOURS = int(os.getenv("CARBON_DATA_CACHE_HOURS", "6"))
-    ELECTRICITY_MAPS_API_TOKEN = os.getenv("ELECTRICITY_MAPS_API_TOKEN", "")
+    EIA_API_KEY = os.getenv("EIA_API_KEY", "")
+    ENTSOE_API_TOKEN = os.getenv("ENTSOE_API_TOKEN", "")
+
+    # Real workload data
+    USE_REAL_WORKLOAD_DATA = os.getenv("USE_REAL_WORKLOAD_DATA", "false").lower() == "true"
+    WORKLOAD_DATA_PATH = os.getenv("WORKLOAD_DATA_PATH", "data/azure_traces/vmtable.csv")

@@ -164,12 +164,6 @@ def get_intensity_at(
     }
 
 
-def generate_carbon_intensity_data(days: int = 30):
-    """Now uses real data instead of synthetic."""
-    from src.data.carbon_intensity_provider import get_carbon_intensity
-    return get_carbon_intensity(hours=days * 24)
-
-
 # ── Quick self-test ───────────────────────────────────────────────────
 if __name__ == "__main__":
     print("Generating 30-day carbon intensity time series...")

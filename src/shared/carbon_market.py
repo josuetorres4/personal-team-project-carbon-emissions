@@ -5,7 +5,7 @@ Teams receive weekly carbon budgets (kgCO2e) and can trade surplus/deficit.
 import json
 import logging
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -43,7 +43,7 @@ class CarbonTrade:
     price_per_kg: float              # internal carbon price (USD)
     reason: str                      # why the trade was proposed
     status: str = "proposed"        # proposed | approved | rejected
-    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     approved_by: Optional[str] = None
 
 
@@ -60,7 +60,7 @@ class CarbonMarket:
         self.weekly_budget_kg = weekly_budget_kg
         self.budgets: dict = {}
         self.trades: list = []
-        self.week = datetime.utcnow().strftime("%Y-W%W")
+        self.week = datetime.now(timezone.utc).strftime("%Y-W%W")
         self._initialize_budgets()
 
     def _initialize_budgets(self):
