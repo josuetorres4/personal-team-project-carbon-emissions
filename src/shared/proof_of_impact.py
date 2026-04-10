@@ -3,7 +3,7 @@ Proof-of-Impact Layer — generates CSRD-grade evidence cards.
 Every verified saving gets an auditable one-page report.
 """
 from fpdf import FPDF
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -14,7 +14,7 @@ class ProofOfImpactCard:
         self.v = verification
         self.j = job
         self.m = market
-        self.generated_at = datetime.utcnow().isoformat()
+        self.generated_at = datetime.now(timezone.utc).isoformat()
 
     def to_dict(self) -> dict:
         """Machine-readable evidence record."""

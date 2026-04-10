@@ -31,18 +31,12 @@ import pandas as pd
 from src.agents.base import BaseAgent, LLMProvider
 from src.shared.models import Recommendation
 
-# Import Config for centralized settings, fall back to local defaults if unavailable
-try:
-    from config import Config as _Config
-    _MAX_RECOMMENDATIONS_PER_BATCH = _Config.MAX_RECOMMENDATIONS_PER_BATCH
-    _MAX_BATCH_COST_INCREASE = _Config.MAX_BATCH_COST_INCREASE
-    _MAX_JOBS_PER_REGION = _Config.MAX_JOBS_PER_REGION_PER_BATCH
-    _MAX_LLM_RISK_ASSESSMENTS = _Config.MAX_LLM_RISK_ASSESSMENTS
-except Exception:
-    _MAX_RECOMMENDATIONS_PER_BATCH = 6000
-    _MAX_BATCH_COST_INCREASE = 500.0
-    _MAX_JOBS_PER_REGION = 15
-    _MAX_LLM_RISK_ASSESSMENTS = 10
+from config import Config
+
+_MAX_RECOMMENDATIONS_PER_BATCH = Config.MAX_RECOMMENDATIONS_PER_BATCH
+_MAX_BATCH_COST_INCREASE = Config.MAX_BATCH_COST_INCREASE
+_MAX_JOBS_PER_REGION = Config.MAX_JOBS_PER_REGION_PER_BATCH
+_MAX_LLM_RISK_ASSESSMENTS = Config.MAX_LLM_RISK_ASSESSMENTS
 
 
 # ── Governance configuration ──────────────────────────────────────────

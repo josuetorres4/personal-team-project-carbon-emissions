@@ -9,12 +9,29 @@ Requires: run `python run_pipeline.py` first to generate data.
 
 import json
 import os
+import subprocess
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from src.agents.base import LLMProvider
+from config import Config
+
+
+def _get_data_source_info() -> dict:
+    """Detect which data sources are active."""
+    llm = "Groq" if os.getenv("GROQ_API_KEY") else ("OpenAI" if os.getenv("OPENAI_API_KEY") else "Mock")
+    carbon_sources = []
+    if Config.USE_REAL_CARBON_DATA:
+        if Config.EIA_API_KEY:
+            carbon_sources.append("EIA")
+        if Config.ENTSOE_API_TOKEN:
+            carbon_sources.append("ENTSO-E")
+        carbon_sources.append("Ember")  # always available (static)
+    carbon = " + ".join(carbon_sources) if carbon_sources else "Synthetic"
+    workload = "Azure VM Traces" if Config.USE_REAL_WORKLOAD_DATA else "Synthetic"
+    return {"llm": llm, "carbon": carbon, "workload": workload}
 
 # ── Page config ───────────────────────────────────────────────────────
 st.set_page_config(
@@ -67,41 +84,63 @@ def load_data():
 data = load_data()
 summary = data["summary"]
 
+_sources = _get_data_source_info()
+
 # ── Sidebar ───────────────────────────────────────────────────────────
 with st.sidebar:
-    st.title("sust-AI-naible")
+    st.title("🌍 sust-AI-naible")
     st.caption("Multi-Agent Cloud Carbon Optimization")
+    st.divider()
+
+    # Data source badges
+    st.markdown("**Data Sources**")
+    st.markdown(f"🤖 LLM: `{_sources['llm']}`")
+    st.markdown(f"⚡ Carbon: `{_sources['carbon']}`")
+    st.markdown(f"☁️ Workloads: `{_sources['workload']}`")
     st.divider()
 
     st.metric("Simulation Days", summary["simulation_days"])
     st.metric("Total Jobs", f"{summary['total_jobs']:,}")
-    st.metric("Carbon Price", "$75/ton CO₂e")
+    st.metric("Carbon Price", f"${Config.CARBON_PRICE_PER_TON:.0f}/ton CO₂e")
 
     st.divider()
     page = st.radio("Navigation", [
         "🌍 Your Impact This Week",
-        "Overview",
+        "💬 Ask the Agent",
+        "Agent Reasoning",
         "Carbon Analysis",
         "Optimization Results",
         "Verification (MRV)",
         "Team Leaderboard",
         "Evidence Explorer",
         "Trade-off Analysis",
-        "Agent Reasoning",
         "🤖 The Debate",
         "🌍 The Impact",
-        "💬 Ask the Agent",
     ])
 
-# Equivalency calculations for impact page
+    st.divider()
+    if st.button("🔄 Re-run Pipeline", use_container_width=True):
+        with st.spinner("Running pipeline... this may take a minute."):
+            result = subprocess.run(
+                ["python", "run_pipeline.py"],
+                capture_output=True, text=True, timeout=300,
+            )
+            if result.returncode == 0:
+                st.success("Pipeline complete! Refreshing...")
+                st.cache_data.clear()
+                st.rerun()
+            else:
+                st.error(f"Pipeline failed:\n{result.stderr[-500:]}")
+
+# Equivalency calculations for impact page — factors from src/shared/impact.py (EPA 2024)
 def carbon_to_equivalencies(kg: float) -> dict:
+    from src.shared.impact import EQUIVALENCIES
+    eq_map = {e["id"]: e["kg_co2_per_unit"] for e in EQUIVALENCIES}
     return {
-        "miles_not_driven": round(kg * 2.47, 1),          # EPA: 0.404 kgCO2/mile
-        "phones_charged": round(kg * 121.6, 0),            # EPA: 0.00822 kg/charge
-        "trees_for_a_year": round(kg / 21.77, 2),          # EPA: 21.77 kg/tree/year
-        "coal_not_burned_grams": round(kg * 1000 / 2.42, 0),
-        "hours_of_netflix": round(kg / 0.036, 1),          # 36g CO2/hour streaming
-        "flights_avoided_minutes": round(kg / 0.255, 1),   # 255g CO2/passenger-mile, ~6mi/min
+        "miles_not_driven": round(kg / eq_map["miles_not_driven"], 1),
+        "phones_charged": round(kg / eq_map["smartphones_charged"], 0),
+        "trees_for_a_year": round(kg / eq_map["tree_seedlings_10yr"], 2),
+        "coal_not_burned_grams": round(kg * 1000 / eq_map["coal_not_burned"], 0),
     }
 
 
@@ -128,15 +167,12 @@ if page == "🌍 Your Impact This Week":
         </div>
         """, unsafe_allow_html=True)
 
-        # Real-world equivalencies
-        col1, col2, col3 = st.columns(3)
+        # Real-world equivalencies (EPA 2024 factors via src/shared/impact.py)
+        col1, col2, col3, col4 = st.columns(4)
         col1.metric("🚗 Miles not driven", f"{eq['miles_not_driven']:,}")
         col2.metric("📱 Phones charged", f"{int(eq['phones_charged']):,}")
         col3.metric("🌳 Trees working for a year", f"{eq['trees_for_a_year']}")
-
-        col4, col5 = st.columns(2)
         col4.metric("🏭 Coal not burned", f"{int(eq['coal_not_burned_grams']):,}g")
-        col5.metric("✈️ Flight time avoided", f"{eq['flights_avoided_minutes']:.0f} min")
 
         # CSRD readiness indicator
         st.subheader("📋 CSRD Filing Readiness")
@@ -179,89 +215,53 @@ if page == "🌍 Your Impact This Week":
     else:
         st.info("No proof-of-impact data available yet. Run `python run_pipeline.py` first.")
 
-
-# ══════════════════════════════════════════════════════════════════════
-# PAGE: Overview
-# ══════════════════════════════════════════════════════════════════════
-if page == "Overview":
-    st.title("System Overview")
-    st.markdown("**Closed-loop carbon optimization**: Sense → Model → Decide → Act → Verify → Learn")
-
-    # Key metrics
-    col1, col2, col3, col4 = st.columns(4)
-
-    baseline_e = summary["baseline"]["total_emissions_kgco2e"]
-    optimized_e = summary["optimized"]["total_emissions_kgco2e"]
-    reduction = summary["improvement"]["emissions_reduction_kgco2e"]
-    reduction_pct = summary["improvement"]["emissions_reduction_pct"]
-
-    col1.metric(
-        "Baseline Emissions",
-        f"{baseline_e:.1f} kgCO₂e",
-    )
-    col2.metric(
-        "Optimized Emissions",
-        f"{optimized_e:.1f} kgCO₂e",
-        delta=f"-{reduction:.1f} kgCO₂e",
-        delta_color="inverse",
-    )
-    col3.metric(
-        "Reduction",
-        f"{reduction_pct:.1f}%",
-    )
-    col4.metric(
-        "Verified Savings",
-        f"{summary['pipeline']['verification_summary']['total_verified_savings_kgco2e']*1000:.0f} gCO₂e",
-    )
-
+    # ── Pipeline Overview (merged from Overview page) ─────────────────
     st.divider()
+    with st.expander("📊 Pipeline Overview", expanded=True):
+        st.markdown("**Closed-loop carbon optimization**: Sense → Model → Decide → Act → Verify → Learn")
 
-    # Pipeline flow
-    col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("Recommendations", summary["pipeline"]["recommendations_generated"])
-    col2.metric("Approved", summary["pipeline"]["recommendations_approved"])
-    col3.metric("Executed", summary["pipeline"]["recommendations_executed"])
-    col4.metric("Verified", summary["pipeline"]["verifications_completed"])
-    col5.metric("Points Awarded", f"{summary['gamification']['total_points_awarded']:,}")
+        baseline_e = summary["baseline"]["total_emissions_kgco2e"]
+        optimized_e = summary["optimized"]["total_emissions_kgco2e"]
+        reduction = summary["improvement"]["emissions_reduction_kgco2e"]
+        reduction_pct = summary["improvement"]["emissions_reduction_pct"]
 
-    # Cost comparison
-    st.divider()
-    st.subheader("Cost Comparison")
-    col1, col2, col3 = st.columns(3)
-    col1.metric(
-        "Baseline Cloud Cost",
-        f"${summary['baseline']['total_cost_usd']:,.2f}",
-    )
-    col2.metric(
-        "Optimized Cloud Cost",
-        f"${summary['optimized']['total_cost_usd']:,.2f}",
-        delta=f"${summary['improvement']['cost_change_usd']:+,.2f}",
-        delta_color="inverse",
-    )
-    col3.metric(
-        "Baseline Effective Cost",
-        f"${summary['baseline']['effective_cost_usd']:,.2f}",
-        help="Cloud cost + (emissions × $75/ton)",
-    )
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Baseline Emissions", f"{baseline_e:.1f} kgCO₂e")
+        col2.metric("Optimized Emissions", f"{optimized_e:.1f} kgCO₂e",
+                     delta=f"-{reduction:.1f} kgCO₂e", delta_color="inverse")
+        col3.metric("Reduction", f"{reduction_pct:.1f}%")
+        col4.metric("Verified Savings",
+                     f"{summary['pipeline']['verification_summary']['total_verified_savings_kgco2e']*1000:.0f} gCO₂e")
 
-    # Verification status breakdown
-    st.divider()
-    st.subheader("Verification Status")
-    v_status = summary["pipeline"]["verification_summary"].get("by_status", {})
-    if v_status:
-        status_df = pd.DataFrame([
-            {"Status": k.title(), "Count": v} for k, v in v_status.items()
-        ])
-        fig = px.pie(status_df, values="Count", names="Status",
-                     color="Status",
-                     color_discrete_map={
-                         "Confirmed": "#2ecc71",
-                         "Partial": "#f39c12",
-                         "Refuted": "#e74c3c",
-                         "Inconclusive": "#95a5a6",
-                     })
-        fig.update_layout(height=300)
-        st.plotly_chart(fig, use_container_width=True)
+        col1, col2, col3, col4, col5 = st.columns(5)
+        col1.metric("Recommendations", summary["pipeline"]["recommendations_generated"])
+        col2.metric("Approved", summary["pipeline"]["recommendations_approved"])
+        col3.metric("Executed", summary["pipeline"]["recommendations_executed"])
+        col4.metric("Verified", summary["pipeline"]["verifications_completed"])
+        col5.metric("Points Awarded", f"{summary['gamification']['total_points_awarded']:,}")
+
+    with st.expander("💰 Cost Comparison"):
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Baseline Cloud Cost", f"${summary['baseline']['total_cost_usd']:,.2f}")
+        col2.metric("Optimized Cloud Cost", f"${summary['optimized']['total_cost_usd']:,.2f}",
+                     delta=f"${summary['improvement']['cost_change_usd']:+,.2f}", delta_color="inverse")
+        col3.metric("Baseline Effective Cost", f"${summary['baseline']['effective_cost_usd']:,.2f}",
+                     help="Cloud cost + (emissions × $75/ton)")
+
+    with st.expander("✅ Verification Status"):
+        v_status = summary["pipeline"]["verification_summary"].get("by_status", {})
+        if v_status:
+            status_df = pd.DataFrame([
+                {"Status": k.title(), "Count": v} for k, v in v_status.items()
+            ])
+            fig = px.pie(status_df, values="Count", names="Status",
+                         color="Status",
+                         color_discrete_map={
+                             "Confirmed": "#2ecc71", "Partial": "#f39c12",
+                             "Refuted": "#e74c3c", "Inconclusive": "#95a5a6",
+                         })
+            fig.update_layout(height=300)
+            st.plotly_chart(fig, use_container_width=True)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -542,6 +542,14 @@ elif page == "Team Leaderboard":
                 f"{int(lb.iloc[2]['total_points']):,} pts",
                 f"{lb.iloc[2]['total_kgco2e_saved']*1000:.0f} gCO₂e saved",
             )
+        elif len(lb) >= 1:
+            cols = st.columns(len(lb))
+            for i in range(len(lb)):
+                cols[i].metric(
+                    f"#{i+1} {lb.iloc[i]['team_id']}",
+                    f"{int(lb.iloc[i]['total_points']):,} pts",
+                    f"{lb.iloc[i]['total_kgco2e_saved']*1000:.0f} gCO₂e saved",
+                )
 
         st.divider()
 
@@ -1097,7 +1105,7 @@ elif page == "💬 Ask the Agent":
             st.markdown(_pending_q)
         with st.chat_message("assistant"):
             with st.spinner("Thinking…"):
-                _resp = LLMProvider("auto").chat(sys_prompt, _pending_q, temperature=0.7)
+                _resp = st.session_state.setdefault("_llm", LLMProvider("auto")).chat(sys_prompt, _pending_q, temperature=0.7)
             st.markdown(_resp)
         st.session_state.chat_history.extend([
             {"role": "user", "content": _pending_q},
@@ -1120,7 +1128,7 @@ elif page == "💬 Ask the Agent":
 
         with st.chat_message("assistant"):
             with st.spinner("Thinking…"):
-                _resp = LLMProvider("auto").chat(sys_prompt, _context, temperature=0.7)
+                _resp = st.session_state.setdefault("_llm", LLMProvider("auto")).chat(sys_prompt, _context, temperature=0.7)
             st.markdown(_resp)
 
         st.session_state.chat_history.extend([

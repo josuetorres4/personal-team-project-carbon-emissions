@@ -33,9 +33,11 @@ import pandas as pd
 from src.agents.base import LLMProvider
 from src.simulator.workload_generator import generate_workloads, jobs_to_dataframe
 from src.simulator.carbon_intensity import generate_intensity_timeseries
+from src.data.carbon_intensity_real import get_carbon_intensity_data
+from src.data.azure_traces import get_workload_data
 from src.simulator.cost_model import compute_job_cost
 from src.agents.carbon_accountant import compute_emissions_batch, emissions_to_dataframe
-from src.agents.planner import PlannerAgent, recommendations_to_dataframe, summarize_recommendations
+from src.agents.planner import PlannerAgent, recommendations_to_dataframe, summarize_recommendations, MIN_CARBON_REDUCTION_PCT
 from src.agents.governance import GovernanceAgent, decisions_to_dataframe, summarize_governance
 from src.agents.executor import ExecutorAgent, executions_to_dataframe, generate_mock_ticket_body
 from src.agents.verifier import verify_batch, verifications_to_dataframe, summarize_verification, format_evidence_chain
@@ -94,9 +96,9 @@ class Orchestrator:
         self._section("Step 1: SENSE — Ingestor Agent (simulated)")
 
         t0 = time.time()
-        jobs = generate_workloads(sim_start, num_days=sim_days, seed=seed)
+        jobs = get_workload_data(sim_start, sim_days=sim_days, seed=seed)
         jobs_df = jobs_to_dataframe(jobs)
-        intensity_df = generate_intensity_timeseries(sim_start, num_days=sim_days, seed=seed)
+        intensity_df = get_carbon_intensity_data(sim_start, num_days=sim_days, seed=seed)
 
         jobs_df["cost_usd"] = jobs_df.apply(
             lambda r: compute_job_cost(r["region"], r["vcpus"], r["gpu_count"], r["duration_hours"]),
@@ -218,13 +220,16 @@ class Orchestrator:
 
         while should_replan(verifications) and replan_count < MAX_REPLAN_CYCLES:
             replan_count += 1
-            self._log(f"Replan cycle {replan_count}: less than 50% of savings are significant.")
-            # Re-run planning with tighter constraints
+            # Each cycle raises the bar: cycle 1 = 1.5x, cycle 2 = 2x the base threshold
+            tighter_threshold = MIN_CARBON_REDUCTION_PCT * (1 + 0.5 * replan_count)
+            self._log(f"Replan cycle {replan_count}: less than 50% of savings are significant. "
+                      f"Tightening min carbon reduction to {tighter_threshold:.1f}%.")
             planner_result = self.planner.run({
                 "jobs": jobs,
                 "intensity_df": intensity_df,
                 "time_resolution_hours": time_resolution_hours,
                 "verbose": self.verbose,
+                "min_carbon_reduction_override": tighter_threshold,
             })
             recommendations = planner_result["recommendations"]
             gov_result = self.governance.run({
@@ -349,6 +354,9 @@ class Orchestrator:
             cost_change_usd=cost_change,
             total_cloud_spend=total_baseline_cost,
         )
+        from config import Config
+        carbon_price = Config.CARBON_PRICE_PER_TON
+
         summary = {
             "timestamp": datetime.now().isoformat(),
             "llm_provider": self.llm.provider,
@@ -357,12 +365,12 @@ class Orchestrator:
             "baseline": {
                 "total_emissions_kgco2e": round(total_baseline_kgco2e, 4),
                 "total_cost_usd": round(total_baseline_cost, 2),
-                "effective_cost_usd": round(total_baseline_cost + total_baseline_kgco2e / 1000 * 75, 2),
+                "effective_cost_usd": round(total_baseline_cost + total_baseline_kgco2e / 1000 * carbon_price, 2),
             },
             "optimized": {
                 "total_emissions_kgco2e": round(total_post_kgco2e, 4),
                 "total_cost_usd": round(post_cost, 2),
-                "effective_cost_usd": round(post_cost + total_post_kgco2e / 1000 * 75, 2),
+                "effective_cost_usd": round(post_cost + total_post_kgco2e / 1000 * carbon_price, 2),
             },
             "improvement": {
                 "emissions_reduction_kgco2e": round(actual_reduction, 4),

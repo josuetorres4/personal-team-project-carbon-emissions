@@ -30,14 +30,9 @@ import pandas as pd
 from src.agents.base import BaseAgent, LLMProvider
 from src.shared.models import Job, Recommendation
 
-# Import Config for centralized settings, fall back to local defaults if unavailable
-try:
-    from config import Config as _Config
-    _MAX_LLM_TICKETS = _Config.MAX_LLM_TICKETS
-except Exception:
-    _MAX_LLM_TICKETS = 10
+from config import Config
 
-MAX_LLM_TICKETS = _MAX_LLM_TICKETS
+MAX_LLM_TICKETS = Config.MAX_LLM_TICKETS
 
 
 @dataclass

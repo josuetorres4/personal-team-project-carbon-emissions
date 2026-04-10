@@ -27,29 +27,18 @@ from src.shared.models import (
 )
 from src.agents.carbon_accountant import compute_emissions_for_config
 from src.simulator.cost_model import compute_total_cost
+from src.simulator.carbon_intensity import get_intensity_at
 
-# Import Config for centralized settings, fall back to local defaults if unavailable
-try:
-    from config import Config as _Config
-    _CARBON_PRICE_PER_TON = _Config.CARBON_PRICE_PER_TON
-    _MIN_CARBON_REDUCTION_PCT = _Config.MIN_CARBON_REDUCTION_PCT
-    _MAX_COST_INCREASE_PCT = _Config.MAX_COST_INCREASE_PCT
-    _MAX_LLM_RATIONALES = _Config.MAX_LLM_RATIONALES
-except Exception:
-    _CARBON_PRICE_PER_TON = 75.0
-    _MIN_CARBON_REDUCTION_PCT = 10.0
-    _MAX_COST_INCREASE_PCT = 20.0
-    _MAX_LLM_RATIONALES = 10
-
+from config import Config
 
 # ── Planner configuration ────────────────────────────────────────────
-CARBON_PRICE_PER_TON = _CARBON_PRICE_PER_TON
+CARBON_PRICE_PER_TON = Config.CARBON_PRICE_PER_TON
 CARBON_PRICE_PER_KG = CARBON_PRICE_PER_TON / 1000
 
 REQUIRE_CARBON_REDUCTION = True
-MIN_CARBON_REDUCTION_PCT = _MIN_CARBON_REDUCTION_PCT
-MAX_COST_INCREASE_PCT = _MAX_COST_INCREASE_PCT
-MAX_LLM_RATIONALES = _MAX_LLM_RATIONALES
+MIN_CARBON_REDUCTION_PCT = Config.MIN_CARBON_REDUCTION_PCT
+MAX_COST_INCREASE_PCT = Config.MAX_COST_INCREASE_PCT
+MAX_LLM_RATIONALES = Config.MAX_LLM_RATIONALES
 
 DEFERRAL_WINDOWS = {
     WorkloadCategory.URGENT: timedelta(hours=0),
@@ -147,6 +136,7 @@ Do NOT recommend shifts that save less than 5% carbon.
         intensity_df = task["intensity_df"]
         time_resolution = task.get("time_resolution_hours", 4)
         verbose = task.get("verbose", False)
+        min_reduction_override = task.get("min_carbon_reduction_override", None)
 
         # Step 1: Agent reasons about the task
         self.memory.add_reasoning("task_received",
@@ -158,18 +148,22 @@ Do NOT recommend shifts that save less than 5% carbon.
         recommendations = []
         skipped = 0
         considered = 0
-        clean_regions = {"eu-north-1", "us-west-2"}
+        # Threshold below which a region's current intensity is too clean to optimize
+        ALREADY_CLEAN_THRESHOLD_GCO2 = 50  # gCO2/kWh
 
         for i, job in enumerate(jobs):
             if job.category == WorkloadCategory.URGENT:
                 skipped += 1
                 continue
-            if job.region in clean_regions:
+            # Dynamic check: skip only if the job's current grid intensity is very low
+            current_intensity = get_intensity_at(intensity_df, job.region, job.started_at)
+            if current_intensity["intensity"] < ALREADY_CLEAN_THRESHOLD_GCO2:
                 skipped += 1
                 continue
 
             considered += 1
-            rec = self._plan_single_job(job, intensity_df, time_resolution)
+            rec = self._plan_single_job(job, intensity_df, time_resolution,
+                                        min_reduction_override=min_reduction_override)
             if rec is not None:
                 recommendations.append(rec)
 
@@ -354,6 +348,7 @@ Do NOT recommend shifts that save less than 5% carbon.
 
     def _plan_single_job(
         self, job: Job, intensity_df: pd.DataFrame, time_resolution: int,
+        min_reduction_override: Optional[float] = None,
     ) -> Optional[Recommendation]:
         """Deterministic scoring + constraint checking for a single job."""
         current = _score_config(job, job.region, job.started_at, intensity_df)
@@ -386,7 +381,8 @@ Do NOT recommend shifts that save less than 5% carbon.
         best, best_region, best_time, carbon_delta, cost_delta = best_tuple
 
         carbon_reduction_pct = (abs(carbon_delta) / current["kgco2e"] * 100) if current["kgco2e"] > 0 else 0
-        if carbon_reduction_pct < MIN_CARBON_REDUCTION_PCT:
+        effective_min_reduction = min_reduction_override if min_reduction_override is not None else MIN_CARBON_REDUCTION_PCT
+        if carbon_reduction_pct < effective_min_reduction:
             return None
 
         if best_region != job.region and best_time != job.started_at:

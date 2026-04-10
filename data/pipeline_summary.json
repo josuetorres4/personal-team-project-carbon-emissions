@@ -1,0 +1,157 @@
+{
+  "timestamp": "2026-04-09T22:20:53.881254",
+  "llm_provider": "groq",
+  "simulation_days": 30,
+  "total_jobs": 24274,
+  "baseline": {
+    "total_emissions_kgco2e": 377.8733,
+    "total_cost_usd": 8591.19,
+    "effective_cost_usd": 8619.53
+  },
+  "optimized": {
+    "total_emissions_kgco2e": 320.9411,
+    "total_cost_usd": 8544.95,
+    "effective_cost_usd": 8569.02
+  },
+  "improvement": {
+    "emissions_reduction_kgco2e": 56.9322,
+    "emissions_reduction_pct": 15.1,
+    "cost_change_usd": -46.23
+  },
+  "impact": {
+    "monthly": {
+      "kg_co2e_saved": 56.9322,
+      "tons_co2e_saved": 0.056932,
+      "cost_change_usd": -46.23,
+      "cost_change_pct": -0.5381
+    },
+    "annual_projection": {
+      "kg_co2e_saved": 683.1869,
+      "tons_co2e_saved": 0.683187,
+      "cost_change_usd": -554.76
+    },
+    "equivalencies": [
+      {
+        "id": "led_bulb_hours",
+        "label": "LED bulb hours",
+        "value": 11386.4,
+        "unit": "hours",
+        "icon": "\ud83d\udca1"
+      },
+      {
+        "id": "smartphones_charged",
+        "label": "Smartphones charged",
+        "value": 7116.5,
+        "unit": "charges",
+        "icon": "\ud83d\udcf1"
+      },
+      {
+        "id": "miles_not_driven",
+        "label": "Miles not driven",
+        "value": 140.9,
+        "unit": "miles",
+        "icon": "\ud83d\ude97"
+      }
+    ],
+    "carbon_pricing_scenarios": [
+      {
+        "scenario": "Voluntary Market (current)",
+        "usd_per_ton": 15.0,
+        "monthly_value_usd": 0.85,
+        "annual_value_usd": 10.25
+      },
+      {
+        "scenario": "EU ETS 2025",
+        "usd_per_ton": 75.0,
+        "monthly_value_usd": 4.27,
+        "annual_value_usd": 51.24
+      },
+      {
+        "scenario": "EU ETS 2030 (projected)",
+        "usd_per_ton": 150.0,
+        "monthly_value_usd": 8.54,
+        "annual_value_usd": 102.48
+      },
+      {
+        "scenario": "EPA Social Cost of Carbon",
+        "usd_per_ton": 204.0,
+        "monthly_value_usd": 11.61,
+        "annual_value_usd": 139.37
+      }
+    ],
+    "efficiency": {
+      "kg_co2e_per_dollar_extra_cost": null,
+      "break_even_carbon_price_usd_per_ton": null
+    }
+  },
+  "pipeline": {
+    "recommendations_generated": 2794,
+    "recommendations_approved": 2794,
+    "recommendations_executed": 2794,
+    "verifications_completed": 2794,
+    "verification_summary": {
+      "count": 2794,
+      "total_verified_savings_kgco2e": 56.9322,
+      "total_counterfactual_kgco2e": 86.2747,
+      "total_actual_kgco2e": 29.3425,
+      "aggregate_ci_90": {
+        "lower": 40.2646,
+        "upper": 73.6048
+      },
+      "by_status": {
+        "partial": 1189,
+        "confirmed": 1605
+      },
+      "sla_violations": 0,
+      "calibration_self_consistency": 100.0
+    },
+    "negotiation_dialogues": 1,
+    "replan_cycles": 0,
+    "final_significance_ratio": 0.5730136005726557
+  },
+  "gamification": {
+    "total_points_awarded": 5009,
+    "teams_with_points": 9,
+    "leaderboard_top3": [
+      {
+        "team_id": "eu-backend",
+        "total_points": 1470,
+        "total_kgco2e_saved": 15.5381,
+        "total_actions": 145,
+        "rank": 1
+      },
+      {
+        "team_id": "eu-frontend",
+        "total_points": 1280,
+        "total_kgco2e_saved": 13.4679,
+        "total_actions": 120,
+        "rank": 2
+      },
+      {
+        "team_id": "backend-api",
+        "total_points": 674,
+        "total_kgco2e_saved": 7.1815,
+        "total_actions": 79,
+        "rank": 3
+      }
+    ]
+  },
+  "agents": {
+    "planner": {
+      "reasoning_steps": 9,
+      "actions_taken": 0
+    },
+    "governance": {
+      "reasoning_steps": 5,
+      "actions_taken": 0
+    },
+    "executor": {
+      "reasoning_steps": 7,
+      "actions_taken": 0
+    },
+    "copilot": {
+      "reasoning_steps": 11,
+      "actions_taken": 0
+    }
+  }
+}

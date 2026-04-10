@@ -90,16 +90,16 @@ class LLMProvider:
                     base_url="https://api.groq.com/openai/v1",
                 )
                 self._model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
-            except Exception:
-                print("  [LLM] Groq not available, falling back to mock")
+            except Exception as e:
+                print(f"  [LLM] Groq init failed: {e}. Falling back to mock.")
                 self.provider = "mock"
 
         if self.provider == "openai":
             try:
                 from openai import OpenAI
                 self._client = OpenAI()
-            except Exception:
-                print("  [LLM] OpenAI not available, falling back to mock")
+            except Exception as e:
+                print(f"  [LLM] OpenAI init failed: {e}. Falling back to mock.")
                 self.provider = "mock"
 
     @staticmethod
@@ -178,14 +178,18 @@ class LLMProvider:
                     )
                 return response.choices[0].message.content
             except Exception as e:
-                error_str = str(e).lower()
-                is_rate_limit = (
-                    "rate_limit" in error_str
-                    or "rate limit" in error_str
-                    or "429" in error_str
-                    or "too many requests" in error_str
-                    or "token" in error_str and "limit" in error_str
-                )
+                # Prefer structured status code when available (OpenAI/Groq exceptions)
+                status_code = getattr(e, "status_code", None)
+                if status_code == 429:
+                    is_rate_limit = True
+                else:
+                    error_str = str(e).lower()
+                    is_rate_limit = (
+                        "rate_limit" in error_str
+                        or "rate limit" in error_str
+                        or "429" in error_str
+                        or "too many requests" in error_str
+                    )
                 if is_rate_limit and attempt < max_retries - 1:
                     delay = base_delay * (2 ** attempt)
                     print(f"  [LLM] Rate limit hit, retrying in {delay:.0f}s "
