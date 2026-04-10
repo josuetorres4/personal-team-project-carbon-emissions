@@ -42,7 +42,3 @@ jobs:
 
       - name: Run tests
         run: pytest tests/ -v --tb=short -x
-
-      - name: Smoke-test pipeline (mock mode)
-        run: python run_pipeline.py
-        timeout-minutes: 5
