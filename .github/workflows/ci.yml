@@ -19,9 +19,7 @@ jobs:
       ENTSOE_API_TOKEN: ""
       SIM_DAYS: "3"
       SEED: "42"
-      MAX_LLM_RATIONALES: "0"
-      MAX_LLM_TICKETS: "0"
-      MAX_LLM_RISK_ASSESSMENTS: "0"
+      # Leave MAX_LLM_* at their defaults — mock provider never calls Groq
 
     steps:
       - uses: actions/checkout@v4
