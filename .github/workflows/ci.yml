@@ -14,6 +14,7 @@ jobs:
       LLM_PROVIDER: mock
       USE_REAL_CARBON_DATA: "false"
       USE_REAL_WORKLOAD_DATA: "false"
+      REAL_DATA_ONLY: "false"
       GROQ_API_KEY: ""
       EIA_API_KEY: ""
       ENTSOE_API_TOKEN: ""
