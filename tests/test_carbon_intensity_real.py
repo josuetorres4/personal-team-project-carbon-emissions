@@ -1,4 +1,4 @@
-"""Tests for real carbon intensity data connector."""
+"""Tests for real carbon intensity data connector + Electricity Maps connector."""
 
 import os
 from datetime import datetime
@@ -8,27 +8,85 @@ import pandas as pd
 import pytest
 
 
-def test_get_carbon_intensity_data_falls_back_to_synthetic():
-    """When USE_REAL_CARBON_DATA=false, should return synthetic data."""
-    with patch.dict(os.environ, {"USE_REAL_CARBON_DATA": "false"}, clear=False):
-        # Reload config to pick up env change
-        import importlib
+def _reload_config_with(env: dict):
+    """Helper: patch env, reload config so it picks up the new vars."""
+    import importlib
+    with patch.dict(os.environ, env, clear=False):
         import config
         importlib.reload(config)
+        return config
 
-        from src.data.carbon_intensity_real import get_carbon_intensity_data
-        df = get_carbon_intensity_data(datetime(2025, 1, 1), num_days=1, seed=42)
 
-        assert isinstance(df, pd.DataFrame)
-        assert len(df) > 0
-        # Synthetic data should NOT have "EIA" or "ENTSO-E" in source
-        assert not df["source"].str.contains("EIA API").any()
+def test_real_data_only_raises_when_keys_missing():
+    """REAL_DATA_ONLY=true with no Electricity Maps / EIA / ENTSO-E keys must raise."""
+    cfg = _reload_config_with({
+        "REAL_DATA_ONLY": "true",
+        "USE_REAL_CARBON_DATA": "true",
+        "ELECTRICITYMAPS_API_TOKEN": "",
+        "EIA_API_KEY": "",
+        "ENTSOE_API_TOKEN": "",
+    })
+    # Reload the module that reads the config
+    import importlib
+    from src.data import carbon_intensity_real
+    importlib.reload(carbon_intensity_real)
+
+    with pytest.raises(RuntimeError):
+        carbon_intensity_real.get_carbon_intensity_data(
+            datetime(2025, 1, 1), num_days=1, seed=42
+        )
+
+
+def test_real_data_only_requires_use_real_carbon_data_flag():
+    """REAL_DATA_ONLY=true with USE_REAL_CARBON_DATA=false must raise immediately."""
+    _reload_config_with({
+        "REAL_DATA_ONLY": "true",
+        "USE_REAL_CARBON_DATA": "false",
+    })
+    import importlib
+    from src.data import carbon_intensity_real
+    importlib.reload(carbon_intensity_real)
+
+    with pytest.raises(RuntimeError, match="USE_REAL_CARBON_DATA=true"):
+        carbon_intensity_real.get_carbon_intensity_data(
+            datetime(2025, 1, 1), num_days=1, seed=42
+        )
+
+
+def test_legacy_mode_still_falls_back_to_synthetic():
+    """REAL_DATA_ONLY=false must keep the original fallback-to-synthetic path."""
+    _reload_config_with({
+        "REAL_DATA_ONLY": "false",
+        "USE_REAL_CARBON_DATA": "false",
+    })
+    import importlib
+    from src.data import carbon_intensity_real
+    importlib.reload(carbon_intensity_real)
+
+    df = carbon_intensity_real.get_carbon_intensity_data(
+        datetime(2025, 1, 1), num_days=1, seed=42
+    )
+
+    assert isinstance(df, pd.DataFrame)
+    assert len(df) > 0
+    # Synthetic data should NOT have "EIA API" or "Electricity Maps" in source
+    assert not df["source"].str.contains("EIA API").any()
+    assert not df["source"].str.contains("Electricity Maps").any()
 
 
 def test_output_schema_matches_expected():
-    """Output DataFrame must have the correct columns."""
-    from src.data.carbon_intensity_real import get_carbon_intensity_data
-    df = get_carbon_intensity_data(datetime(2025, 1, 1), num_days=1, seed=42)
+    """Output DataFrame must have the correct columns regardless of source."""
+    _reload_config_with({
+        "REAL_DATA_ONLY": "false",
+        "USE_REAL_CARBON_DATA": "false",
+    })
+    import importlib
+    from src.data import carbon_intensity_real
+    importlib.reload(carbon_intensity_real)
+
+    df = carbon_intensity_real.get_carbon_intensity_data(
+        datetime(2025, 1, 1), num_days=1, seed=42
+    )
 
     expected_cols = {"timestamp", "region", "intensity_gco2_kwh",
                      "intensity_lower", "intensity_upper", "source"}
@@ -36,27 +94,28 @@ def test_output_schema_matches_expected():
 
 
 def test_region_to_source_mapping_covers_all_regions():
-    """Every region in the system should have a data source mapping."""
+    """Every region in the system has at least one real data source mapping."""
     from src.data.carbon_intensity_real import (
         EIA_REGION_MAP, ENTSOE_REGION_MAP, EMBER_REGION_MAP,
     )
+    from src.data.electricity_maps import ZONE_MAP
     from src.shared.models import REGIONS
 
-    all_mapped = set(EIA_REGION_MAP) | set(ENTSOE_REGION_MAP) | set(EMBER_REGION_MAP)
+    all_mapped = (
+        set(EIA_REGION_MAP) | set(ENTSOE_REGION_MAP)
+        | set(EMBER_REGION_MAP) | set(ZONE_MAP)
+    )
     for region in REGIONS:
-        assert region in all_mapped, f"Region {region} has no data source mapping"
+        assert region in all_mapped, f"Region {region} has no real data source mapping"
 
 
-def test_ember_static_generates_hourly_data():
-    """Ember static source should produce hourly records with variation."""
-    from src.data.carbon_intensity_real import _get_ember_static
-    df = _get_ember_static("ap-south-1", datetime(2025, 1, 1), num_days=1, seed=42)
+def test_electricity_maps_covers_all_regions():
+    """Electricity Maps zone map must cover every supported region as the primary source."""
+    from src.data.electricity_maps import ZONE_MAP
+    from src.shared.models import REGIONS
 
-    assert len(df) == 24  # 1 day * 24 hours
-    assert df["region"].unique().tolist() == ["ap-south-1"]
-    assert "Ember" in df["source"].iloc[0]
-    # Should have variation (not all same value)
-    assert df["intensity_gco2_kwh"].std() > 0
+    for region in REGIONS:
+        assert region in ZONE_MAP, f"Region {region} missing from Electricity Maps zone map"
 
 
 def test_emission_factors_are_reasonable():
@@ -67,16 +126,14 @@ def test_emission_factors_are_reasonable():
         assert 0 <= ef <= 1200, f"Emission factor for {fuel} ({ef}) out of range"
 
 
-def test_api_failure_falls_back_gracefully(tmp_path):
-    """When API fetch fails, should fall back to synthetic for that region."""
-    from src.data import carbon_intensity_real as cir
-    # Override cache dir to avoid hitting real cached data
-    original_cache = cir.CACHE_DIR
-    cir.CACHE_DIR = tmp_path / "empty_cache"
-    try:
-        result = cir._fetch_eia_intensity("us-east-1", datetime(2025, 1, 1),
-                                          datetime(2025, 1, 2), "invalid_key_xyz")
-        # Should return None or empty DataFrame (not raise)
-        assert result is None or (isinstance(result, pd.DataFrame) and len(result) == 0)
-    finally:
-        cir.CACHE_DIR = original_cache
+def test_electricity_maps_returns_empty_without_token():
+    """fetch_electricity_maps_intensity returns {} when no token is configured."""
+    _reload_config_with({"ELECTRICITYMAPS_API_TOKEN": ""})
+    import importlib
+    from src.data import electricity_maps
+    importlib.reload(electricity_maps)
+
+    result = electricity_maps.fetch_electricity_maps_intensity(
+        datetime(2025, 1, 1), num_days=1
+    )
+    assert result == {}

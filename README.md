@@ -45,7 +45,9 @@ Google's own research ([Radovanović et al., *IEEE Trans. Power Systems* 2022](h
 
 ---
 
-## Quick Start (no API key required)
+## Quick Start
+
+This project ships in **real-data-only mode** by default — the pipeline aborts at startup unless real data sources are configured. See **Real-Data-Only Mode** below for the keys you need, or set `REAL_DATA_ONLY=false` for offline development.
 
 ```bash
 # 1. Clone and install
@@ -53,14 +55,21 @@ git clone <repo-url>
 cd team-project-carbon-emissions
 pip install -r requirements.txt
 
-# 2. Run the pipeline (mock LLM — works without an OpenAI key)
+# 2. Configure real data (or set REAL_DATA_ONLY=false)
+cp .env.example .env  # then fill in keys
+
+# 3. Run the multi-agent pipeline
 python run_pipeline.py
 
-# 3. Open the dashboard
+# 4. Compare against a single-model baseline
+python run_comparison.py             # multi-agent vs single-model (small)
+python run_comparison.py --skip-frontier  # without Anthropic key
+
+# 5. Open the dashboard
 streamlit run dashboard.py
 ```
 
-That's it. The pipeline generates synthetic data, runs all agents, and saves results to `data/`. The dashboard reads those files and visualises everything.
+The dashboard now includes three new pages: **🏛️ Architecture**, **⚖️ Verdict**, and **🧠 Reasoning Compare** — populated by `run_comparison.py`.
 
 ---
 
@@ -304,6 +313,25 @@ The system works **fully without an API key** — the mock LLM generates context
 | Groq | `GROQ_API_KEY` | `llama-3.3-70b-versatile` | Free tier available at [console.groq.com](https://console.groq.com) |
 | OpenAI | `OPENAI_API_KEY` | `gpt-4o-mini` | Paid API |
 | Mock | *(none needed)* | — | Built-in, works offline |
+| Anthropic | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6` | Frontier baseline used by `run_comparison.py` |
+
+## Real-Data-Only Mode
+
+When `REAL_DATA_ONLY=true` (default), the orchestrator's pre-flight check aborts startup if any real source is missing:
+
+- `USE_REAL_CARBON_DATA=true` AND `ELECTRICITYMAPS_API_TOKEN` (preferred) OR `EIA_API_KEY` + `ENTSOE_API_TOKEN`
+- `USE_REAL_WORKLOAD_DATA=true` AND `data/azure_traces/vmtable.csv` present
+
+Set `REAL_DATA_ONLY=false` for offline development; reported numbers are not defensible in legacy mode. See [docs/architecture.md](docs/architecture.md) for the cost-model scaling path.
+
+## Architecture A/B (multi-agent vs single big model)
+
+`run_comparison.py` runs three pipelines on identical inputs and produces:
+
+- `data/comparison_summary.json` — decision quality, verified savings, approval rate, significance ratio
+- `data/architecture_comparison.json` — tokens, energy (Patterson/Luccioni 2023), wall clock, LLM-emissions per run
+
+The dashboard's **🏛️ Architecture**, **⚖️ Verdict**, and **🧠 Reasoning Compare** pages render those artifacts side by side. Energy numbers are estimates: prompt 0.05 Wh/1k tok + completion 0.30 Wh/1k tok, converted via the EPA US-grid average. All emission math (baseline, counterfactual, verified savings) is deterministic in *both* pipelines — only the LLM-facing reasoning differs.
 
 When `LLM_PROVIDER=auto` (the default), the system checks for `GROQ_API_KEY` first, then `OPENAI_API_KEY`, and falls back to the mock if neither is set.
 

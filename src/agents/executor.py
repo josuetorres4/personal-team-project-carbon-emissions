@@ -234,6 +234,7 @@ def generate_mock_ticket_body(rec, execution):
 
 
 def executions_to_dataframe(records: list[ExecutionRecord]):
+    from src.simulator.cost_model import PRICING_SOURCE
     rows = []
     for r in records:
         rows.append({
@@ -244,5 +245,6 @@ def executions_to_dataframe(records: list[ExecutionRecord]):
             "execution_status": r.execution_status,
             "mock_ticket_id": r.mock_ticket_id, "mock_pr_url": r.mock_pr_url,
             "executed_at": r.executed_at,
+            "pricing_source": PRICING_SOURCE,
         })
     return pd.DataFrame(rows)

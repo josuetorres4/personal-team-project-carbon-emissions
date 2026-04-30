@@ -57,19 +57,33 @@ class LLMProvider:
         "[Rate limit exceeded — falling back to deterministic processing]"
     )
 
-    def __init__(self, provider: str = "auto", max_total_tokens: Optional[int] = None):
+    def __init__(
+        self,
+        provider: str = "auto",
+        max_total_tokens: Optional[int] = None,
+        model: Optional[str] = None,
+    ):
         """
         Args:
-            provider: "openai", "groq", "mock", or "auto"
-                      (auto tries groq first, then openai, then mock)
+            provider: "openai", "groq", "anthropic", "mock", or "auto".
+                      Auto tries groq → openai → mock.
             max_total_tokens: Optional token budget override.
-                              Defaults to Config.MAX_TOTAL_LLM_TOKENS (100,000).
+                              Defaults to Config.MAX_TOTAL_LLM_TOKENS.
+            model: Optional model override. If provided, replaces the
+                   provider-default model.
         """
         from config import Config
         self.provider = provider
         self._client = None
-        self._model = os.environ.get("LLM_MODEL", "gpt-4o-mini")
+        self._model = model or os.environ.get("LLM_MODEL", "gpt-4o-mini")
+
+        # Token tracking — split prompt / completion for energy estimation
         self.total_tokens_used = 0
+        self.total_prompt_tokens = 0
+        self.total_completion_tokens = 0
+        self.call_count = 0
+        self.call_log: list[dict] = []  # per-call details for the audit trail
+
         self.max_total_tokens = (
             max_total_tokens if max_total_tokens is not None
             else Config.MAX_TOTAL_LLM_TOKENS
@@ -89,7 +103,7 @@ class LLMProvider:
                     api_key=os.environ["GROQ_API_KEY"],
                     base_url="https://api.groq.com/openai/v1",
                 )
-                self._model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+                self._model = model or os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
             except Exception as e:
                 print(f"  [LLM] Groq init failed: {e}. Falling back to mock.")
                 self.provider = "mock"
@@ -98,8 +112,21 @@ class LLMProvider:
             try:
                 from openai import OpenAI
                 self._client = OpenAI()
+                self._model = model or os.environ.get("LLM_MODEL", "gpt-4o-mini")
             except Exception as e:
                 print(f"  [LLM] OpenAI init failed: {e}. Falling back to mock.")
+                self.provider = "mock"
+
+        if self.provider == "anthropic":
+            try:
+                import anthropic  # type: ignore
+                api_key = os.environ.get("ANTHROPIC_API_KEY")
+                if not api_key:
+                    raise RuntimeError("ANTHROPIC_API_KEY not set")
+                self._client = anthropic.Anthropic(api_key=api_key)
+                self._model = model or Config.FRONTIER_MODEL
+            except Exception as e:
+                print(f"  [LLM] Anthropic init failed: {e}. Falling back to mock.")
                 self.provider = "mock"
 
     @staticmethod
@@ -144,12 +171,30 @@ class LLMProvider:
 
         if self.provider in ("openai", "groq"):
             return self._chat_openai(system_prompt, user_message, temperature)
+        elif self.provider == "anthropic":
+            return self._chat_anthropic(system_prompt, user_message, temperature)
         else:
             return self._chat_mock(system_prompt, user_message)
 
     def complete(self, prompt: str, temperature: float = 0.3) -> str:
         """Single-prompt completion (convenience wrapper around chat)."""
         return self.chat("You are a helpful assistant.", prompt, temperature)
+
+    def _record_usage(
+        self,
+        prompt_tokens: int,
+        completion_tokens: int,
+        kind: str = "openai",
+    ) -> None:
+        self.total_prompt_tokens += prompt_tokens
+        self.total_completion_tokens += completion_tokens
+        self.total_tokens_used += prompt_tokens + completion_tokens
+        self.call_count += 1
+        self.call_log.append({
+            "kind": kind,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+        })
 
     def _chat_openai(self, system_prompt: str, user_message: str, temperature: float) -> str:
         from config import Config
@@ -166,17 +211,20 @@ class LLMProvider:
                     temperature=temperature,
                     max_tokens=Config.LLM_MAX_TOKENS,
                 )
-                # Track actual token usage from the API response
+                content = response.choices[0].message.content
                 if response.usage is not None:
-                    self.total_tokens_used += response.usage.total_tokens
-                else:
-                    # Fallback: estimate when usage data is unavailable
-                    self.total_tokens_used += (
-                        self.estimate_tokens(system_prompt)
-                        + self.estimate_tokens(user_message)
-                        + self.estimate_tokens(response.choices[0].message.content or "")
+                    self._record_usage(
+                        prompt_tokens=response.usage.prompt_tokens,
+                        completion_tokens=response.usage.completion_tokens,
+                        kind=self.provider,
                     )
-                return response.choices[0].message.content
+                else:
+                    self._record_usage(
+                        prompt_tokens=self.estimate_tokens(system_prompt) + self.estimate_tokens(user_message),
+                        completion_tokens=self.estimate_tokens(content or ""),
+                        kind=self.provider,
+                    )
+                return content
             except Exception as e:
                 # Prefer structured status code when available (OpenAI/Groq exceptions)
                 status_code = getattr(e, "status_code", None)
@@ -211,15 +259,20 @@ class LLMProvider:
                             temperature=temperature,
                             max_tokens=Config.LLM_MAX_TOKENS,
                         )
+                        content = response.choices[0].message.content
                         if response.usage is not None:
-                            self.total_tokens_used += response.usage.total_tokens
-                        else:
-                            self.total_tokens_used += (
-                                self.estimate_tokens(system_prompt)
-                                + self.estimate_tokens(user_message)
-                                + self.estimate_tokens(response.choices[0].message.content or "")
+                            self._record_usage(
+                                prompt_tokens=response.usage.prompt_tokens,
+                                completion_tokens=response.usage.completion_tokens,
+                                kind=self.provider,
                             )
-                        return response.choices[0].message.content
+                        else:
+                            self._record_usage(
+                                prompt_tokens=self.estimate_tokens(system_prompt) + self.estimate_tokens(user_message),
+                                completion_tokens=self.estimate_tokens(content or ""),
+                                kind=self.provider,
+                            )
+                        return content
                     except Exception:
                         print(f"  [LLM] Final attempt after {wait}s wait also failed. "
                               f"Falling back to deterministic response.")
@@ -255,12 +308,59 @@ class LLMProvider:
             response = f"[Mock LLM] Processed request with {len(user_message)} chars of context."
 
         # Track estimated token usage for mock calls
-        self.total_tokens_used += (
-            self.estimate_tokens(system_prompt)
-            + self.estimate_tokens(user_message)
-            + self.estimate_tokens(response)
+        self._record_usage(
+            prompt_tokens=self.estimate_tokens(system_prompt) + self.estimate_tokens(user_message),
+            completion_tokens=self.estimate_tokens(response),
+            kind="mock",
         )
         return response
+
+    def _chat_anthropic(self, system_prompt: str, user_message: str, temperature: float) -> str:
+        """Anthropic Messages API call with retry on overload."""
+        from config import Config
+        max_retries = 5
+        base_delay = 2.0
+        for attempt in range(max_retries):
+            try:
+                response = self._client.messages.create(
+                    model=self._model,
+                    max_tokens=Config.LLM_MAX_TOKENS,
+                    temperature=temperature,
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": user_message}],
+                )
+                # Anthropic returns content as a list of blocks
+                content = "".join(
+                    block.text for block in response.content if hasattr(block, "text")
+                )
+                usage = getattr(response, "usage", None)
+                if usage is not None:
+                    self._record_usage(
+                        prompt_tokens=usage.input_tokens,
+                        completion_tokens=usage.output_tokens,
+                        kind="anthropic",
+                    )
+                else:
+                    self._record_usage(
+                        prompt_tokens=self.estimate_tokens(system_prompt) + self.estimate_tokens(user_message),
+                        completion_tokens=self.estimate_tokens(content or ""),
+                        kind="anthropic",
+                    )
+                return content
+            except Exception as e:
+                err = str(e).lower()
+                is_retryable = (
+                    "rate_limit" in err or "overloaded" in err or "429" in err
+                    or "529" in err or "too many requests" in err
+                )
+                if is_retryable and attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    print(f"  [LLM-anthropic] Retryable error, retrying in {delay:.0f}s "
+                          f"(attempt {attempt + 1}/{max_retries})...")
+                    time.sleep(delay)
+                else:
+                    print(f"  [LLM-anthropic] Failed: {e}. Returning rate-limit fallback.")
+                    return self.RATE_LIMIT_RESPONSE
 
     def _mock_dialogue_response(self, system_prompt: str, user_message: str) -> str:
         """Generate a contextual multi-agent dialogue response in mock mode."""

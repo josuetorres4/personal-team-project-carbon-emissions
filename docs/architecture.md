@@ -72,5 +72,34 @@ This separation ensures every number is auditable and reproducible. An auditor n
 - `src/agents/verifier.py` — Counterfactual verification
 - `src/agents/copilot.py` — Team gamification
 - `src/data/carbon_intensity_real.py` — EIA + ENTSO-E + Ember data connector
+- `src/data/electricity_maps.py` — Electricity Maps connector (primary, all 5 regions)
 - `src/data/azure_traces.py` — Azure VM traces loader
-- `dashboard.py` — Streamlit dashboard (12 interactive pages)
+- `src/data/aws_pricing.py` — Stub for live AWS Pricing API (not yet wired up)
+- `dashboard.py` — Streamlit dashboard (interactive pages)
+
+## Real-Data-Only Mode
+
+When `REAL_DATA_ONLY=true` (default), the orchestrator's `preflight_real_data_check()`
+runs before any agent and aborts with a clear message if any of the following
+are missing:
+
+- `USE_REAL_CARBON_DATA=true`
+- `ELECTRICITYMAPS_API_TOKEN` (preferred), OR both `EIA_API_KEY` + `ENTSOE_API_TOKEN`
+- `USE_REAL_WORKLOAD_DATA=true` and `data/azure_traces/vmtable.csv` present
+
+Setting `REAL_DATA_ONLY=false` restores legacy fallback-to-synthetic behavior
+(useful for offline development; not recommended for any reported numbers).
+
+## Cost Model Scaling Path
+
+Today `src/simulator/cost_model.py` uses a cited static snapshot of AWS
+On-Demand pricing (m5.large / g4dn.xlarge, 2025-01-15). To go live:
+
+1. Implement `fetch_vcpu_price()` / `fetch_gpu_price()` / `fetch_egress_price()`
+   in `src/data/aws_pricing.py` against the AWS Pricing List API
+   (`https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/...`).
+2. Replace the static lookups in `cost_model.py` with calls to those functions,
+   cached per `(region, instance_family)` for the lifetime of one pipeline run.
+3. Update `PRICING_SOURCE` to reflect the live source — the `pricing_source`
+   column on `recommendations.csv` and `executions.csv` is forward-compatible,
+   so no schema changes are needed.
