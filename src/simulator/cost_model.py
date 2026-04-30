@@ -1,33 +1,43 @@
 """
 Cloud Cost Model
 ================
-Simple cost model: maps (region, resource_type) → $/hour.
+Maps (region, resource_type) → $/hour using cited AWS On-Demand price snapshots.
 
-In a real system, this would query AWS/GCP pricing APIs.
-Here we use a lookup table with realistic-ish rates.
+Provenance:
+  Per-vCPU rates derived from m5.large On-Demand Linux pricing (2 vCPU, 8 GiB)
+  divided by 2, snapshotted from https://aws.amazon.com/ec2/pricing/on-demand/
+  on 2025-01-15. GPU rates from g4dn.xlarge (1× T4) for the same date. Egress
+  rates from https://aws.amazon.com/ec2/pricing/on-demand/#Data_Transfer.
 
-All prices are Assumptions based on approximate AWS on-demand pricing (2024).
+Scaling to live data:
+  See src/data/aws_pricing.py for the documented stub interface that swaps
+  these tables for the AWS Pricing List API. The schema (`pricing_source`
+  column on recommendations.csv / executions.csv) is forward-compatible with
+  a live source — only the values change.
 """
 
-# ── Pricing tables ────────────────────────────────────────────────────
-# $/hour per vCPU (approximate on-demand for general-purpose instances)
-# Known range: $0.02–0.06/vCPU-hr depending on region and instance family
+PRICING_SOURCE = (
+    "AWS On-Demand Pricing snapshot 2025-01-15 "
+    "(m5.large / g4dn.xlarge Linux, public pricing pages)"
+)
 
+# ── Pricing tables ────────────────────────────────────────────────────
+# $/hour per vCPU — derived from m5.large On-Demand Linux (2025-01-15)
 VCPU_COST_PER_HOUR = {
-    "us-east-1":  0.040,   # Virginia — cheapest US region typically
-    "us-west-2":  0.040,   # Oregon — same as us-east-1 usually
-    "eu-west-1":  0.046,   # Ireland — ~15% premium over US
-    "eu-north-1": 0.048,   # Stockholm — slightly more than Ireland
-    "ap-south-1": 0.038,   # Mumbai — often cheapest
+    "us-east-1":  0.0480,   # Virginia — m5.large $0.096 / 2 vCPU
+    "us-west-2":  0.0480,   # Oregon — same as us-east-1
+    "eu-west-1":  0.0535,   # Ireland — m5.large $0.107 / 2 vCPU
+    "eu-north-1": 0.0510,   # Stockholm — m5.large $0.102 / 2 vCPU
+    "ap-south-1": 0.0470,   # Mumbai — m5.large $0.094 / 2 vCPU
 }
 
-# $/hour per GPU (approximate for NVIDIA T4 / A10G equivalent)
+# $/hour per GPU — derived from g4dn.xlarge (1× NVIDIA T4) Linux On-Demand
 GPU_COST_PER_HOUR = {
-    "us-east-1":  0.75,
-    "us-west-2":  0.75,
-    "eu-west-1":  0.85,
-    "eu-north-1": 0.90,
-    "ap-south-1": 0.70,
+    "us-east-1":  0.526,
+    "us-west-2":  0.526,
+    "eu-west-1":  0.587,
+    "eu-north-1": 0.579,
+    "ap-south-1": 0.681,
 }
 
 # Cross-region data transfer ($/GB egress)

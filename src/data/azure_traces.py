@@ -14,6 +14,7 @@ Columns in the Azure dataset:
 Mapping heuristics are documented inline.
 """
 
+import os
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
@@ -113,14 +114,23 @@ def load_azure_traces(
 
     print(f"  [Data] Loading Azure VM traces from {data_path}...")
 
-    # Read only the columns we need for memory efficiency
-    usecols = ["vmId", "subscriptionId", "deploymentId", "vmCategory",
-               "vmCreated", "vmDeleted", "maxCpu", "avgCpu", "core"]
+    # Dataset has no header row — columns are positional
+    # Order: vmId, subscriptionId, deploymentId, vmCreated, vmDeleted,
+    #        maxCpu, avgCpu, p95MaxCpu, vmCategory, core, vm_mem
+    COLUMN_NAMES = [
+        "vmId", "subscriptionId", "deploymentId",
+        "vmCreated", "vmDeleted",
+        "maxCpu", "avgCpu", "p95MaxCpu",
+        "vmCategory", "core", "vm_mem",
+    ]
+    USE_COLS = [0, 1, 2, 3, 4, 5, 6, 8, 9]  # positional indices we need
 
     try:
         df = pd.read_csv(
             data_path,
-            usecols=lambda c: c in usecols,
+            header=None,
+            names=COLUMN_NAMES,
+            usecols=USE_COLS,
             nrows=max_jobs * 3 if max_jobs else None,  # read extra to filter
         )
     except Exception as e:
@@ -199,21 +209,88 @@ def load_azure_traces(
     return jobs
 
 
+def _inject_production_workloads(jobs: list[Job], seed: int) -> list[Job]:
+    """
+    Stress-test hook: if STRESS_TEST_PRODUCTION_FRACTION is set (e.g. "0.50"),
+    randomly reclassify that fraction of loaded jobs to workload_type="production".
+
+    Why this matters: the Planner marks any recommendation for a production job
+    as risk_level="high" (planner.py:397). Governance then applies its 85%
+    human-simulated approval rate, producing real rejections. Single-model has
+    no code-level enforcement — its fallback approves everything that saves
+    carbon. This makes the architectural gap between the two pipelines visible.
+
+    Jobs keep their original WorkloadCategory (not URGENT), so the Planner still
+    considers them for optimization.
+    """
+    frac_str = os.getenv("STRESS_TEST_PRODUCTION_FRACTION", "")
+    if not frac_str:
+        return jobs
+    try:
+        frac = float(frac_str)
+    except ValueError:
+        return jobs
+    if frac <= 0:
+        return jobs
+
+    rng = np.random.default_rng(seed + 9999)
+    n_inject = int(len(jobs) * min(frac, 1.0))
+    non_prod = [i for i, j in enumerate(jobs) if j.workload_type != "production"]
+    chosen = rng.choice(non_prod, size=min(n_inject, len(non_prod)), replace=False)
+    for idx in chosen:
+        jobs[idx].workload_type = "production"
+    print(f"  [StressTest] Reclassified {len(chosen):,} jobs → production "
+          f"({frac:.0%} of {len(jobs):,} total)")
+    return jobs
+
+
 def get_workload_data(
     sim_start: datetime,
     sim_days: int = 30,
     seed: int = 42,
+    max_jobs: Optional[int] = None,
 ) -> list[Job]:
     """
     Public API for the orchestrator. Returns workload data as list[Job].
-    Uses Azure traces if configured, else falls back to synthetic.
+
+    In real-data-only mode (Config.REAL_DATA_ONLY=True, default), the Azure VM
+    traces CSV must exist or this raises RuntimeError. In legacy mode, falls
+    back to synthetic generation.
     """
+    if Config.REAL_DATA_ONLY and not Config.USE_REAL_WORKLOAD_DATA:
+        raise RuntimeError(
+            "REAL_DATA_ONLY=true requires USE_REAL_WORKLOAD_DATA=true. "
+            "Set both env vars to enable real-data-only mode."
+        )
+
     if Config.USE_REAL_WORKLOAD_DATA:
-        print("  [Data] Attempting to load real workload data (Azure VM Traces)...")
-        jobs = load_azure_traces(sim_start, sim_days, seed)
-        if jobs:
-            return jobs
-        print("  [Data] Azure traces load failed, falling back to synthetic")
+        data_path = Path(Config.WORKLOAD_DATA_PATH)
+        if not data_path.exists():
+            msg = (
+                f"Real workload data missing at {data_path}. Download Azure "
+                f"VM traces: wget https://azurepublicdatasettraces.blob.core."
+                f"windows.net/azurepublicdatasetv2/trace_data/vmtable/"
+                f"vmtable.csv.gz && gunzip vmtable.csv.gz && mkdir -p "
+                f"data/azure_traces && mv vmtable.csv {data_path}"
+            )
+            if Config.REAL_DATA_ONLY:
+                raise FileNotFoundError(f"REAL_DATA_ONLY=true — {msg}")
+            print(f"  [Data] {msg}")
+        else:
+            print("  [Data] Loading real workload data (Azure VM Traces)...")
+            effective_max = max_jobs if max_jobs is not None else int(
+                os.getenv("MAX_AZURE_JOBS", "30000")
+            )
+            jobs = load_azure_traces(sim_start, sim_days, seed, max_jobs=effective_max)
+            if jobs:
+                jobs = _inject_production_workloads(jobs, seed)
+                return jobs
+            if Config.REAL_DATA_ONLY:
+                raise RuntimeError(
+                    "Azure traces loaded but produced no jobs. "
+                    "CSV may be empty or malformed."
+                )
+            print("  [Data] Azure traces load failed, falling back to synthetic")
 
     from src.simulator.workload_generator import generate_workloads
     return generate_workloads(sim_start, num_days=sim_days, seed=seed)

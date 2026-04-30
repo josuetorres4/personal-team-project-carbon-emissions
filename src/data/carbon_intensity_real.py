@@ -2,12 +2,19 @@
 Real Carbon Intensity Data Fetcher
 ===================================
 Fetches real grid carbon intensity from multiple sources:
-  - US regions: EIA Open Data API (hourly fuel mix → gCO₂/kWh)
-  - EU regions: ENTSO-E Transparency Platform (hourly generation by type)
-  - India:      Ember Climate static annual average with simulated variation
+  - Primary: Electricity Maps API (covers all 5 regions uniformly)
+  - Secondary (US):  EIA Open Data API — used if Electricity Maps misses a US zone
+  - Documented baseline (India): Ember Climate annual figure (cited, not fetched)
 
-Falls back to synthetic data (src/simulator/carbon_intensity) when API keys
-are missing or requests fail.
+Real-data-only mode (Config.REAL_DATA_ONLY): if any region cannot be sourced
+from a real API, the fetch raises RuntimeError instead of silently falling back
+to synthetic data. This makes the system's "verifiable claims" guarantee real.
+
+Per-fuel emission factors (gCO2eq/kWh) below are cited from:
+  - IPCC AR6 Working Group III, Annex III "Technology-specific Cost and
+    Performance Parameters" (2022)
+  - US EPA eGRID 2023 (released Jan 2025) for region-blended figures
+These are static (updated yearly), not dynamically fetched.
 """
 
 import json
@@ -414,49 +421,83 @@ def fetch_real_intensity(
     seed: int = 42,
 ) -> Optional[pd.DataFrame]:
     """
-    Fetch real carbon intensity for all 5 regions from their respective sources.
-    Returns None if critical regions fail (triggering full fallback).
+    Fetch real carbon intensity for all 5 regions.
+
+    Source order:
+      1. Electricity Maps (primary — covers all 5 regions uniformly)
+      2. EIA (secondary, US only — if Electricity Maps misses a US zone)
+      3. ENTSO-E (legacy, EU only — kept for backward compatibility)
+
+    In real-data-only mode (Config.REAL_DATA_ONLY=True), any region not covered
+    by a real source causes a RuntimeError. Otherwise, missing regions fall
+    back to synthetic data (legacy behaviour).
     """
+    from src.data.electricity_maps import fetch_electricity_maps_intensity, ZONE_MAP
+
     eia_key = Config.EIA_API_KEY if hasattr(Config, "EIA_API_KEY") else os.getenv("EIA_API_KEY", "")
     entsoe_token = Config.ENTSOE_API_TOKEN if hasattr(Config, "ENTSOE_API_TOKEN") else os.getenv("ENTSOE_API_TOKEN", "")
     end_date = start_date + timedelta(days=num_days)
 
-    all_dfs = []
+    em_data = fetch_electricity_maps_intensity(start_date, num_days)
+    covered = set(em_data.keys())
+
+    all_dfs = list(em_data.values())
     failed_regions = []
 
-    # US regions (EIA) — fetch a small window, then tile across full period
+    # US regions: secondary EIA fetch only if Electricity Maps missed them
     for region in EIA_REGION_MAP:
+        if region in covered:
+            continue
         df = _fetch_eia_intensity(region, start_date, end_date, eia_key)
         if df is not None and len(df) > 0:
             df = _tile_to_period(df, region, start_date, num_days)
             all_dfs.append(df)
-            print(f"  [Data] {region}: {len(df)} hours from EIA (tiled)")
+            covered.add(region)
+            print(f"  [Data] {region}: {len(df)} hours from EIA (secondary)")
         else:
             failed_regions.append(region)
 
-    # EU regions (ENTSO-E)
+    # EU regions (ENTSO-E legacy): only if Electricity Maps missed
     for region in ENTSOE_REGION_MAP:
+        if region in covered:
+            continue
         df = _fetch_entsoe_intensity(region, start_date, end_date, entsoe_token)
         if df is not None and len(df) > 0:
             df = _tile_to_period(df, region, start_date, num_days)
             all_dfs.append(df)
-            print(f"  [Data] {region}: {len(df)} hours from ENTSO-E (tiled)")
+            covered.add(region)
+            print(f"  [Data] {region}: {len(df)} hours from ENTSO-E (legacy)")
         else:
             failed_regions.append(region)
 
-    # India (Ember static)
+    # India: Ember as documented baseline if Electricity Maps missed
     for region in EMBER_REGION_MAP:
+        if region in covered:
+            continue
         df = _get_ember_static(region, start_date, num_days, seed)
         if len(df) > 0:
             all_dfs.append(df)
-            print(f"  [Data] {region}: {len(df)} hours from Ember (static + variation)")
+            covered.add(region)
+            print(f"  [Data] {region}: {len(df)} hours from Ember (cited baseline)")
 
-    if failed_regions:
-        print(f"  [Data] Failed regions: {failed_regions} — using synthetic fallback for these")
-        # Generate synthetic for failed regions only
+    # Any region in ZONE_MAP that we never covered is a real-data miss
+    missing = [r for r in ZONE_MAP if r not in covered] + [
+        r for r in failed_regions if r not in covered
+    ]
+    missing = sorted(set(missing))
+
+    if missing:
+        msg = (
+            f"Real carbon data unavailable for regions: {missing}. "
+            f"Configure ELECTRICITYMAPS_API_TOKEN (preferred), or EIA_API_KEY / "
+            f"ENTSOE_API_TOKEN as secondary sources."
+        )
+        if Config.REAL_DATA_ONLY:
+            raise RuntimeError(f"REAL_DATA_ONLY=true — {msg}")
+        print(f"  [Data] {msg} Using synthetic fallback.")
         from src.simulator.carbon_intensity import generate_intensity_timeseries
         synthetic_df = generate_intensity_timeseries(start_date, num_days=num_days, seed=seed)
-        for region in failed_regions:
+        for region in missing:
             region_df = synthetic_df[synthetic_df["region"] == region].copy()
             region_df["source"] = region_df["source"] + " (synthetic fallback)"
             all_dfs.append(region_df)
@@ -474,14 +515,28 @@ def get_carbon_intensity_data(
     seed: int = 42,
 ) -> pd.DataFrame:
     """
-    Public API for the orchestrator. Returns carbon intensity DataFrame
-    in the standard schema. Uses real data if configured, else synthetic.
+    Public API for the orchestrator. Returns carbon intensity DataFrame in the
+    standard schema.
+
+    In real-data-only mode (Config.REAL_DATA_ONLY=True, default), any failure
+    raises RuntimeError. In legacy mode, silently falls back to synthetic.
     """
+    if Config.REAL_DATA_ONLY and not Config.USE_REAL_CARBON_DATA:
+        raise RuntimeError(
+            "REAL_DATA_ONLY=true requires USE_REAL_CARBON_DATA=true. "
+            "Set both env vars to enable real-data-only mode."
+        )
+
     if Config.USE_REAL_CARBON_DATA:
-        print("  [Data] Attempting to fetch real carbon intensity data...")
+        print("  [Data] Fetching real carbon intensity data...")
         df = fetch_real_intensity(start_date, num_days, seed)
         if df is not None and len(df) > 0:
             return df
+        if Config.REAL_DATA_ONLY:
+            raise RuntimeError(
+                "Real carbon data fetch returned no rows. "
+                "Check ELECTRICITYMAPS_API_TOKEN and network connectivity."
+            )
         print("  [Data] Real data fetch failed entirely, falling back to synthetic")
 
     from src.simulator.carbon_intensity import generate_intensity_timeseries

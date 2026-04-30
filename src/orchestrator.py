@@ -51,8 +51,14 @@ class Orchestrator:
     Manages the multi-agent pipeline and message passing between agents.
     """
 
-    def __init__(self, llm_provider: str = "auto", verbose: bool = True):
+    def __init__(
+        self,
+        llm_provider: str = "auto",
+        verbose: bool = True,
+        output_dir: str = "data",
+    ):
         self.verbose = verbose
+        self.output_dir = output_dir
         self.llm = LLMProvider(llm_provider)
 
         # Create agent instances with shared LLM
@@ -69,6 +75,42 @@ class Orchestrator:
 
         self._log(f"Orchestrator initialized with LLM provider: {self.llm.provider}")
         self._log(f"Agents: Planner, Governance, Executor, Verifier (deterministic), Copilot")
+        self._log(f"Output dir: {self.output_dir}")
+
+    @staticmethod
+    def preflight_real_data_check() -> None:
+        """
+        Raise RuntimeError before any agents run if real-data-only mode is on
+        but required keys/files are missing. Called by run() and by the entry
+        scripts so failures happen early with a clear message.
+        """
+        from config import Config
+        if not Config.REAL_DATA_ONLY:
+            return
+
+        missing = []
+        if not Config.USE_REAL_CARBON_DATA:
+            missing.append("USE_REAL_CARBON_DATA=true")
+        if not Config.ELECTRICITYMAPS_API_TOKEN and not (
+            Config.EIA_API_KEY and Config.ENTSOE_API_TOKEN
+        ):
+            missing.append(
+                "ELECTRICITYMAPS_API_TOKEN (preferred) OR both "
+                "EIA_API_KEY + ENTSOE_API_TOKEN"
+            )
+        if not Config.USE_REAL_WORKLOAD_DATA:
+            missing.append("USE_REAL_WORKLOAD_DATA=true")
+        from pathlib import Path
+        if Config.USE_REAL_WORKLOAD_DATA and not Path(Config.WORKLOAD_DATA_PATH).exists():
+            missing.append(f"workload CSV at {Config.WORKLOAD_DATA_PATH}")
+
+        if missing:
+            raise RuntimeError(
+                "REAL_DATA_ONLY=true but the following requirements are not "
+                "satisfied:\n  - " + "\n  - ".join(missing) +
+                "\n\nSet REAL_DATA_ONLY=false to permit synthetic fallback "
+                "(not recommended), or configure the missing items in .env."
+            )
 
     def _log(self, msg: str):
         if self.verbose:
@@ -86,8 +128,10 @@ class Orchestrator:
         
         Returns: dict with all outputs, metrics, and agent traces
         """
+        self.preflight_real_data_check()
+
         start_time = time.time()
-        os.makedirs("data", exist_ok=True)
+        os.makedirs(self.output_dir, exist_ok=True)
 
         self._section("sust-AI-naible — Agentic Pipeline")
         self._log(f"LLM: {self.llm.provider} | Sim: {sim_days} days | Seed: {seed}")
@@ -178,7 +222,7 @@ class Orchestrator:
         # Save sample ticket
         if exec_records:
             sample_ticket = exec_records[0].ticket_body
-            with open("data/sample_ticket.md", "w") as f:
+            with open(f"{self.output_dir}/sample_ticket.md", "w") as f:
                 f.write(sample_ticket)
 
         # ── VERIFY: Verifier (deterministic — no LLM) ────────────────
@@ -203,7 +247,7 @@ class Orchestrator:
                   f"{verify_summary.get('total_verified_savings_kgco2e', 0)*1000:.0f} gCO₂e savings")
 
         if verifications:
-            with open("data/sample_evidence_chain.txt", "w") as f:
+            with open(f"{self.output_dir}/sample_evidence_chain.txt", "w") as f:
                 f.write(format_evidence_chain(verifications[0]))
 
         # --- FEEDBACK LOOP ---
@@ -287,7 +331,7 @@ class Orchestrator:
 
         if narratives:
             first_team = list(narratives.keys())[0]
-            with open("data/sample_team_narrative.md", "w") as f:
+            with open(f"{self.output_dir}/sample_team_narrative.md", "w") as f:
                 f.write(narratives[first_team])
 
         # ── Save all outputs ──────────────────────────────────────────
@@ -307,16 +351,16 @@ class Orchestrator:
         )
 
         outputs = {
-            "data/jobs_baseline.csv": jobs_df,
-            "data/carbon_intensity.csv": intensity_df,
-            "data/baseline_emissions.csv": baseline_emissions_df,
-            "data/recommendations.csv": recs_df,
-            "data/governance_decisions.csv": gov_df,
-            "data/executions.csv": exec_df,
-            "data/verifications.csv": verify_df,
-            "data/points.csv": points_df,
-            "data/leaderboard.csv": leaderboard_df,
-            "data/jobs_optimized.csv": post_jobs_df,
+            f"{self.output_dir}/jobs_baseline.csv": jobs_df,
+            f"{self.output_dir}/carbon_intensity.csv": intensity_df,
+            f"{self.output_dir}/baseline_emissions.csv": baseline_emissions_df,
+            f"{self.output_dir}/recommendations.csv": recs_df,
+            f"{self.output_dir}/governance_decisions.csv": gov_df,
+            f"{self.output_dir}/executions.csv": exec_df,
+            f"{self.output_dir}/verifications.csv": verify_df,
+            f"{self.output_dir}/points.csv": points_df,
+            f"{self.output_dir}/leaderboard.csv": leaderboard_df,
+            f"{self.output_dir}/jobs_optimized.csv": post_jobs_df,
         }
         for path, df in outputs.items():
             df.to_csv(path, index=False)
@@ -332,19 +376,19 @@ class Orchestrator:
             "sla_compliant": v.sla_compliant,
             "evidence_chain": v.evidence_chain,
         } for v in verifications]
-        with open("data/evidence_chains.json", "w") as f:
+        with open(f"{self.output_dir}/evidence_chains.json", "w") as f:
             json.dump(evidence_data, f, indent=2, default=str)
 
         # Agent traces JSON
-        with open("data/agent_traces.json", "w") as f:
+        with open(f"{self.output_dir}/agent_traces.json", "w") as f:
             json.dump(self.agent_traces, f, indent=2, default=str)
-        self._log(f"  data/agent_traces.json (reasoning traces for all agents)")
+        self._log(f"  {self.output_dir}/agent_traces.json (reasoning traces for all agents)")
 
         # Agent dialogues JSON
         dialogue_records = [d.to_audit_record() for d in self.dialogues]
-        with open("data/agent_dialogues.json", "w") as f:
+        with open(f"{self.output_dir}/agent_dialogues.json", "w") as f:
             json.dump(dialogue_records, f, indent=2, default=str)
-        self._log(f"  data/agent_dialogues.json ({len(dialogue_records)} dialogues)")
+        self._log(f"  {self.output_dir}/agent_dialogues.json ({len(dialogue_records)} dialogues)")
 
         # Pipeline summary
         post_cost = post_jobs_df["cost_usd"].sum()
@@ -402,8 +446,18 @@ class Orchestrator:
                 }
                 for name, trace in self.agent_traces.items()
             },
+            "architecture": "multi_agent",
+            "llm_usage": {
+                "provider": self.llm.provider,
+                "model": getattr(self.llm, "_model", "unknown"),
+                "total_tokens": self.llm.total_tokens_used,
+                "prompt_tokens": getattr(self.llm, "total_prompt_tokens", 0),
+                "completion_tokens": getattr(self.llm, "total_completion_tokens", 0),
+                "llm_calls": getattr(self.llm, "call_count", 0),
+                "wall_clock_seconds": round(time.time() - start_time, 2),
+            },
         }
-        with open("data/pipeline_summary.json", "w") as f:
+        with open(f"{self.output_dir}/pipeline_summary.json", "w") as f:
             json.dump(summary, f, indent=2, default=str)
 
         elapsed = time.time() - start_time

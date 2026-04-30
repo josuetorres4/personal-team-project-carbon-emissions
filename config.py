@@ -65,11 +65,27 @@ class Config:
     MIN_CARBON_SAVING_PCT = float(os.getenv("MIN_CARBON_SAVING_PCT", "5"))
 
     # Real carbon intensity data
-    USE_REAL_CARBON_DATA = os.getenv("USE_REAL_CARBON_DATA", "false").lower() == "true"
+    USE_REAL_CARBON_DATA = os.getenv("USE_REAL_CARBON_DATA", "true").lower() == "true"
     CARBON_DATA_CACHE_HOURS = int(os.getenv("CARBON_DATA_CACHE_HOURS", "6"))
     EIA_API_KEY = os.getenv("EIA_API_KEY", "")
     ENTSOE_API_TOKEN = os.getenv("ENTSOE_API_TOKEN", "")
+    ELECTRICITYMAPS_API_TOKEN = os.getenv("ELECTRICITYMAPS_API_TOKEN", "")
 
     # Real workload data
-    USE_REAL_WORKLOAD_DATA = os.getenv("USE_REAL_WORKLOAD_DATA", "false").lower() == "true"
+    USE_REAL_WORKLOAD_DATA = os.getenv("USE_REAL_WORKLOAD_DATA", "true").lower() == "true"
     WORKLOAD_DATA_PATH = os.getenv("WORKLOAD_DATA_PATH", "data/azure_traces/vmtable.csv")
+
+    # Real-data-only mode: when true, missing keys/files raise instead of falling back
+    REAL_DATA_ONLY = os.getenv("REAL_DATA_ONLY", "true").lower() == "true"
+
+    # Frontier model (for single-model architecture comparison)
+    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+    FRONTIER_MODEL = os.getenv("FRONTIER_MODEL", "claude-sonnet-4-6")
+    FRONTIER_PROVIDER = os.getenv("FRONTIER_PROVIDER", "anthropic")  # "anthropic" | "openai"
+
+    # Energy estimation (per-token, used for architecture comparison)
+    # Source: Patterson et al. 2021 / Luccioni et al. 2023 — H100/A100 inference figures
+    ENERGY_WH_PER_1K_PROMPT_TOKENS = float(os.getenv("ENERGY_WH_PER_1K_PROMPT_TOKENS", "0.05"))
+    ENERGY_WH_PER_1K_COMPLETION_TOKENS = float(os.getenv("ENERGY_WH_PER_1K_COMPLETION_TOKENS", "0.30"))
+    # Grid intensity for converting LLM energy → emissions (US average, gCO2/kWh)
+    LLM_GRID_INTENSITY_GCO2_KWH = float(os.getenv("LLM_GRID_INTENSITY_GCO2_KWH", "386"))

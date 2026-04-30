@@ -129,3 +129,22 @@ All sources referenced in the CP1 presentation, with links.
 - **Dashboard:** https://app.electricitymaps.com/dashboard
 - **What it does:** Real-time carbon intensity for 350+ zones worldwide, historical data, 72h forecasts
 - **What it lacks:** Signal only — doesn't integrate with schedulers, no workload awareness, no verification
+- **How we use it:** Primary live carbon-intensity source for all 5 supported regions via `src/data/electricity_maps.py`. Auth via `ELECTRICITYMAPS_API_TOKEN`.
+
+---
+
+## Real-Data-Only Mode — Source Citations
+
+When `REAL_DATA_ONLY=true` (default), every input is sourced from one of the
+following — no synthetic fallback is permitted:
+
+| Input | Source | Mechanism |
+|---|---|---|
+| Carbon intensity | Electricity Maps (primary) | Live API, 6-hour cache |
+| Carbon intensity (US fallback) | EIA Open Data API v2 | Fuel-mix → gCO2/kWh, tiled |
+| Carbon intensity (EU fallback) | ENTSO-E Transparency | A75 generation by type |
+| Carbon intensity (India baseline) | Ember Climate 2023 | Cited annual avg + diurnal variation |
+| Per-fuel emission factors | IPCC AR6 Annex III + EPA eGRID 2023 | Static, cited in code |
+| Workload data | Azure Public Dataset VM Traces 2019 | One-time CSV download |
+| Cloud pricing | AWS On-Demand snapshot 2025-01-15 | Cited static lookup; live path stubbed in `src/data/aws_pricing.py` |
+| LLM energy estimate | Patterson et al. 2021 / Luccioni et al. 2023 | Static per-token figure, cited in dashboard |

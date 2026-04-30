@@ -483,6 +483,7 @@ def plan_batch(jobs, intensity_df, verbose=False, time_resolution_hours=4):
 
 
 def recommendations_to_dataframe(recs: list[Recommendation]) -> pd.DataFrame:
+    from src.simulator.cost_model import PRICING_SOURCE
     rows = []
     for r in recs:
         rows.append({
@@ -492,6 +493,7 @@ def recommendations_to_dataframe(recs: list[Recommendation]) -> pd.DataFrame:
             "proposed_time": r.proposed_time, "est_carbon_delta_kg": r.est_carbon_delta_kg,
             "est_cost_delta_usd": r.est_cost_delta_usd, "confidence": r.confidence,
             "rationale": r.rationale, "status": r.status, "risk_level": r.risk_level,
+            "pricing_source": PRICING_SOURCE,
         })
     return pd.DataFrame(rows)
 

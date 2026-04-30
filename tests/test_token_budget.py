@@ -134,14 +134,15 @@ class TestTokenBudgetOpenAI:
         mock_client.chat.completions.create.assert_not_called()
 
     def test_openai_tracks_usage_from_response(self):
-        """After a successful OpenAI call, tokens are tracked from response.usage."""
+        """After a successful OpenAI call, tokens are tracked from prompt+completion."""
         llm = LLMProvider("mock")
         llm.provider = "openai"
         llm.max_total_tokens = 100_000
 
         mock_response = MagicMock()
         mock_response.choices = [MagicMock(message=MagicMock(content="response text"))]
-        mock_response.usage = MagicMock(total_tokens=150)
+        # _record_usage adds prompt_tokens + completion_tokens
+        mock_response.usage = MagicMock(prompt_tokens=120, completion_tokens=30)
 
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = mock_response
@@ -149,6 +150,9 @@ class TestTokenBudgetOpenAI:
 
         llm._chat_openai("system", "user", 0.3)
         assert llm.total_tokens_used == 150
+        assert llm.total_prompt_tokens == 120
+        assert llm.total_completion_tokens == 30
+        assert llm.call_count == 1
 
     def test_openai_estimates_when_usage_is_none(self):
         """Falls back to estimation when response.usage is None."""
